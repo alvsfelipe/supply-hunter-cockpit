@@ -1,0 +1,13 @@
+supply.db
+*.pyc
+__pycache__/
+.venv/
+.env
+.env.*
+!.env.example
+.DS_Store
+.vercel
+config.js
+7cantos-supply-hunter.zip
+supabase/.branches/
+supabase/.temp/

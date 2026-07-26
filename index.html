@@ -1,0 +1,377 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Supply Hunter — 7Cantos SP</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --paper:#EDEFEA; --card:#F7F8F5; --ink:#171C1A; --mute:#5E6862;
+  --rule:#CBD1C8; --rule2:#DDE1D9;
+  --pine:#2F5D50; --pine-l:#E3EBE6;
+  --brick:#A8322A; --brick-l:#F5E3E0;
+  --gold:#8A6516; --gold-l:#F2EAD6;
+  --r:3px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+h1,h2,h3,.disp{font-family:Archivo,sans-serif;letter-spacing:-.01em}
+.mono{font-family:"IBM Plex Mono",monospace}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none}
+:focus-visible{outline:2px solid var(--pine);outline-offset:2px}
+
+/* shell */
+.shell{display:grid;grid-template-columns:200px 1fr;min-height:100vh}
+nav{background:var(--ink);color:#DDE3DE;padding:20px 0;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{padding:0 18px 18px;border-bottom:1px solid #2C332F;margin-bottom:12px}
+.brand b{font-family:Archivo;font-size:17px;font-weight:700;letter-spacing:-.02em;color:#fff;display:block}
+.brand span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#7D8A83}
+nav button{display:flex;justify-content:space-between;align-items:center;width:100%;
+  padding:9px 18px;color:#AEB9B2;font-size:14px;text-align:left;border-left:3px solid transparent}
+nav button:hover{color:#fff;background:#1E2522}
+nav button[aria-current="true"]{color:#fff;border-left-color:var(--brick);background:#1E2522;font-weight:600}
+nav .n{font-family:"IBM Plex Mono";font-size:11px;color:#7D8A83}
+.navfoot{padding:14px 18px;margin-top:18px;border-top:1px solid #2C332F;font-size:11px;color:#6E7A73;line-height:1.6}
+
+main{padding:0 0 60px}
+.wrap{max-width:1100px;padding:0 30px}
+
+/* meta strip */
+.strip{background:var(--ink);color:#EDEFEA;padding:14px 30px;display:flex;gap:34px;align-items:flex-end;flex-wrap:wrap}
+.strip .k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A968F;display:block;margin-bottom:2px}
+.strip .v{font-family:Archivo;font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em}
+.strip .v small{font-size:13px;font-weight:500;color:#8A968F}
+.gap .v{color:#E8A499}
+.bar{flex:1;min-width:180px}
+.track{height:7px;background:#2C332F;border-radius:99px;overflow:hidden;margin-top:7px}
+.fill{height:100%;background:var(--brick)}
+
+header.pg{padding:26px 30px 14px;border-bottom:1px solid var(--rule)}
+header.pg h1{font-size:25px;font-weight:700}
+header.pg p{color:var(--mute);font-size:13.5px;margin-top:3px;max-width:62ch}
+
+section{display:none}
+section.on{display:block}
+
+/* opportunity row */
+.rows{border-top:1px solid var(--rule2)}
+.row{display:grid;grid-template-columns:74px 1fr 210px;gap:18px;padding:15px 30px;
+  border-bottom:1px solid var(--rule2);align-items:start;background:var(--card)}
+.row:nth-child(even){background:transparent}
+.prio{font-family:Archivo;font-weight:700;font-size:31px;line-height:.95;letter-spacing:-.03em;text-align:right}
+.prio span{display:block;font-family:"IBM Plex Mono";font-size:9px;font-weight:400;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin-top:4px}
+.nm{font-family:Archivo;font-weight:600;font-size:16.5px}
+.meta{font-size:12.5px;color:var(--mute);margin-top:2px}
+.why{font-size:13px;margin-top:7px;max-width:60ch}
+
+/* tally — signature */
+.tally{display:flex;align-items:center;gap:8px;margin-top:9px}
+.ticks{display:flex;gap:2px;align-items:flex-end;height:17px}
+.tick{width:3px;height:100%;background:var(--pine);opacity:.85}
+.tick.f{background:var(--brick)}
+.tallyn{font-family:"IBM Plex Mono";font-size:11px;color:var(--mute);white-space:nowrap}
+
+.tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.tag{font-family:"IBM Plex Mono";font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 6px;border-radius:var(--r);background:var(--rule2);color:var(--mute)}
+.tag.p{background:var(--pine-l);color:var(--pine)}
+.tag.b{background:var(--brick-l);color:var(--brick)}
+.tag.g{background:var(--gold-l);color:var(--gold)}
+
+.act{display:flex;flex-direction:column;gap:6px}
+select.st{width:100%;padding:6px 8px;border:1px solid var(--rule);border-radius:var(--r);background:#fff;font-size:13px}
+.mini{display:flex;gap:6px}
+.mini button{flex:1;padding:6px;border:1px solid var(--rule);border-radius:var(--r);font-size:12px;background:#fff}
+.mini button:hover{border-color:var(--ink)}
+
+.btn{padding:9px 15px;border-radius:var(--r);font-size:14px;font-weight:600;border:1px solid var(--ink);background:var(--ink);color:var(--paper)}
+.btn.ghost{background:none;color:var(--ink)}
+.btn:hover{opacity:.87}
+
+/* panels */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+.panel{background:var(--card);border:1px solid var(--rule);border-radius:var(--r);padding:18px}
+.panel h3{font-size:15px;font-weight:700;margin-bottom:4px}
+.panel .sub{font-size:12.5px;color:var(--mute);margin-bottom:14px}
+label.f{display:block;font-size:12px;color:var(--mute);margin:11px 0 4px}
+input[type=text],input[type=number],select,textarea{width:100%;padding:8px 10px;
+  border:1px solid var(--rule);border-radius:var(--r);background:#fff}
+textarea{min-height:64px;resize:vertical}
+.chk{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--rule2);font-size:13.5px}
+.chk input{margin-top:3px;accent-color:var(--pine);width:15px;height:15px;flex:none}
+.chk b{font-weight:600;display:block}
+.chk span{color:var(--mute);font-size:12.5px}
+
+.scorebox{text-align:center;padding:16px;background:var(--ink);color:#fff;border-radius:var(--r);margin-bottom:14px}
+.scorebox .n{font-family:Archivo;font-weight:700;font-size:46px;line-height:1;letter-spacing:-.03em}
+.scorebox .l{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#8A968F;margin-top:5px}
+.scorebox .sl{font-family:"IBM Plex Mono";font-size:12px;color:#B9C4BD;margin-top:9px}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);
+  padding:7px 9px;border-bottom:1px solid var(--rule)}
+td{padding:9px;border-bottom:1px solid var(--rule2);vertical-align:top}
+td.num,th.num{text-align:right;font-family:"IBM Plex Mono"}
+
+pre{background:var(--ink);color:#D6DED8;padding:12px 14px;border-radius:var(--r);
+  font-family:"IBM Plex Mono";font-size:12.5px;overflow-x:auto;line-height:1.65}
+pre b{color:#F0C99A;font-weight:400}
+.copy{font-family:"IBM Plex Mono";font-size:11px;padding:4px 9px;border:1px solid var(--rule);
+  border-radius:var(--r);background:#fff}
+
+.note{border-left:3px solid var(--brick);background:var(--brick-l);padding:11px 14px;
+  font-size:13px;border-radius:0 var(--r) var(--r) 0;margin:14px 0}
+.note b{font-weight:600}
+
+.stack{display:flex;flex-direction:column;gap:22px;padding:24px 30px}
+.empty{padding:40px 30px;color:var(--mute);font-size:14px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);
+  color:#fff;padding:10px 18px;border-radius:var(--r);font-size:13.5px;opacity:0;
+  transition:opacity .2s;pointer-events:none;z-index:99}
+.toast.on{opacity:1}
+.session{padding:14px 18px;margin-top:18px;border-top:1px solid #2C332F;font-size:11px;color:#AEB9B2}
+.session strong{display:block;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session button{color:#E8A499;padding:4px 0;margin-top:3px}
+.auth-gate{position:fixed;inset:0;z-index:200;background:var(--paper);display:grid;place-items:center;padding:20px}
+.auth-gate[hidden]{display:none}
+.auth-card{width:min(420px,100%);background:var(--card);border:1px solid var(--rule);padding:26px;border-radius:var(--r);box-shadow:0 18px 60px #171c1a1f}
+.auth-card .brand{padding:0 0 16px;margin-bottom:16px;border-bottom:1px solid var(--ink)}
+.auth-card .brand b{color:var(--ink)}
+.auth-card h1{font-size:23px;margin-bottom:4px}
+.auth-card p{color:var(--mute);font-size:13px;margin-bottom:18px}
+.auth-card .error{color:var(--brick);min-height:20px;margin:10px 0 0}
+.auth-card code{font:12px "IBM Plex Mono",monospace;background:var(--rule2);padding:2px 4px}
+.statusline{font:11px "IBM Plex Mono",monospace;color:var(--mute);padding:7px 30px;border-bottom:1px solid var(--rule2);background:var(--card)}
+.statusline[data-state="error"]{color:var(--brick);background:var(--brick-l)}
+.modal{border:0;background:transparent;padding:0;margin:auto;width:min(620px,calc(100% - 30px))}
+.modal::backdrop{background:#171c1ab8}
+.modal-card{background:var(--card);border:1px solid var(--rule);padding:22px;border-radius:var(--r);max-height:88vh;overflow:auto}
+.modal-head{display:flex;justify-content:space-between;gap:16px;align-items:start}
+.modal-head h2{font-size:19px}
+.modal-close{font-size:24px;line-height:1;color:var(--mute)}
+.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.hint{font-size:11px;color:var(--mute);margin-top:4px}
+button:disabled{cursor:not-allowed;opacity:.55}
+
+@media (max-width:860px){
+  .shell{grid-template-columns:1fr}
+  nav{position:static;height:auto;display:flex;overflow-x:auto;padding:0}
+  nav .brand,.navfoot{display:none}
+  nav .session{display:none}
+  nav button{border-left:none;border-bottom:3px solid transparent;white-space:nowrap;padding:13px 15px}
+  nav button[aria-current="true"]{border-left-color:transparent;border-bottom-color:var(--brick)}
+  .grid2{grid-template-columns:1fr}
+  .row{grid-template-columns:56px 1fr;gap:12px;padding:14px 18px}
+  .act{grid-column:1/-1}
+  .wrap,.stack,header.pg,.strip{padding-left:18px;padding-right:18px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="shell">
+<nav>
+  <div class="brand"><b>Supply Hunter</b><span>7Cantos · São Paulo</span></div>
+  <button data-t="hoje" aria-current="true">Hoje <em class="n" id="n-hoje"></em></button>
+  <button data-t="pipe">Oportunidades <em class="n" id="n-pipe"></em></button>
+  <button data-t="qual">Qualificar</button>
+  <button data-t="scripts">Scripts</button>
+  <button data-t="metas">Metas</button>
+  <div class="session" id="session" hidden><strong id="session-email"></strong><button id="logout">Sair</button></div>
+  <div class="navfoot">Contato entra por ação humana.<br>Nenhum envio sem aprovação.</div>
+</nav>
+
+<main>
+<div class="statusline" id="sync-status">Conectando ao Supabase…</div>
+<div class="strip">
+  <div><span class="k">Meta do mês</span><span class="v" id="s-meta">500 <small>unid.</small></span></div>
+  <div><span class="k">Assinadas</span><span class="v" id="s-ass">0</span></div>
+  <div><span class="k">Em pipeline</span><span class="v" id="s-pipe">0 <small>unid. repres.</small></span></div>
+  <div class="gap"><span class="k">Gap</span><span class="v" id="s-gap">500</span></div>
+  <div class="bar"><span class="k">Ritmo do mês</span><div class="track"><div class="fill" id="s-fill" style="width:0"></div></div></div>
+</div>
+
+<!-- HOJE -->
+<section id="t-hoje" class="on">
+  <header class="pg">
+    <h1>Fila de hoje</h1>
+    <p>Ordenada por prioridade — Supply Score multiplicado pelo log das unidades representadas. A barra de marcas mostra a massa de cada oportunidade: é ela que decide a ordem, não o score sozinho.</p>
+  </header>
+  <div class="rows" id="fila"></div>
+</section>
+
+<!-- PIPELINE -->
+<section id="t-pipe">
+  <header class="pg">
+    <h1>Oportunidades</h1>
+    <p>Tudo o que está aberto, em qualquer etapa. Uma oportunidade só vira Qualificada quando os seis critérios estiverem confirmados na aba Qualificar.</p>
+  </header>
+  <div class="stack">
+    <div class="panel">
+      <h3>Funil por unidades representadas</h3>
+      <div class="sub">O funil conta unidades, não negócios. É assim que se enxerga se 500 fecha.</div>
+      <table><thead><tr><th>Etapa</th><th class="num">Negócios</th><th class="num">Unid. representadas</th></tr></thead>
+      <tbody id="funil"></tbody></table>
+    </div>
+    <div class="panel">
+      <h3>Nova oportunidade</h3>
+      <div class="sub">Registre o que o script revelou ou o que você encontrou em campo.</div>
+      <div class="grid2">
+        <div>
+          <label class="f">Nome da organização ou edifício</label>
+          <input type="text" id="f-nome" placeholder="Ex.: Administradora com 9 anúncios em Brooklin">
+          <label class="f">Canal</label>
+          <select id="f-canal">
+            <option>Carteira / administradora</option><option>Incorporadora</option>
+            <option>Edifício / densificação</option><option>Investidor PF</option>
+            <option>Indicação</option><option>Unitário</option>
+          </select>
+          <label class="f">Polo</label>
+          <select id="f-polo"><option>Z1</option><option>Z2</option><option>Z3</option><option>Z4–Z6</option></select>
+        </div>
+        <div>
+          <label class="f">Unidades representadas</label>
+          <input type="number" id="f-unid" value="20" min="1">
+          <label class="f">Supply Score (0–100) — calcule na aba Qualificar</label>
+          <input type="number" id="f-score" value="55" min="0" max="100">
+          <label class="f">Por que agora</label>
+          <input type="text" id="f-why" placeholder="Sinal que disparou: 9 anúncios ativos, entrega recente, redução de preço…">
+        </div>
+      </div>
+      <div style="margin-top:15px"><button class="btn" id="add">Adicionar à fila</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- QUALIFICAR -->
+<section id="t-qual">
+  <header class="pg">
+    <h1>Qualificar</h1>
+    <p>Duas coisas diferentes. O Supply Score estima o quanto vale perseguir. A checagem dos seis critérios decide se já é uma Oportunidade Qualificada — e essa só o interlocutor pode responder.</p>
+  </header>
+  <div class="stack"><div class="grid2">
+    <div class="panel">
+      <h3>Supply Score</h3>
+      <div class="sub">Cem pontos. Marque só o que você confirmou.</div>
+      <div class="scorebox">
+        <div class="n" id="q-score">0</div>
+        <div class="l">de 100 pontos</div>
+        <div class="sl" id="q-prio">prioridade — informe as unidades</div>
+      </div>
+      <label class="f">Região</label>
+      <select id="q-reg" class="qi"><option value="15">Z1 ou Z2 — prioritário (15)</option>
+        <option value="8">Z3 — preparação (8)</option><option value="3">Z4 a Z6 (3)</option></select>
+      <label class="f">Tipologia</label>
+      <select id="q-tip" class="qi"><option value="10">24 a 40 m² (10)</option>
+        <option value="5">41 a 60 m² (5)</option><option value="0">Acima de 60 m² (0)</option></select>
+      <label class="f">Ticket</label>
+      <select id="q-tic" class="qi"><option value="10">Todo o estoque entre R$ 2,2 mil e R$ 10 mil (10)</option>
+        <option value="8">Quase todo (8)</option><option value="5">Cerca de metade (5)</option><option value="0">Fora da faixa (0)</option></select>
+      <label class="f">Múltiplas unidades</label>
+      <select id="q-mul" class="qi"><option value="20">5 ou mais (20)</option><option value="16">3 a 4 (16)</option>
+        <option value="12">2 (12)</option><option value="5">1 (5)</option></select>
+      <div style="margin-top:13px">
+        <div class="chk"><input type="checkbox" class="qc" value="10" id="c1"><label for="c1"><b>Mais de 30 dias anunciado</b><span>+10</span></label></div>
+        <div class="chk"><input type="checkbox" class="qc" value="10" id="c2"><label for="c2"><b>Mais de 60 dias anunciado</b><span>+10 · acumula com o anterior</span></label></div>
+        <div class="chk"><input type="checkbox" class="qc" value="10" id="c3"><label for="c3"><b>Redução de preço detectada</b><span>+10</span></label></div>
+        <div class="chk"><input type="checkbox" class="qc" value="10" id="c4"><label for="c4"><b>Demanda ativa compatível no CRM</b><span>+10 · mesmo bairro, ticket e tipologia</span></label></div>
+        <div class="chk"><input type="checkbox" class="qc" value="5" id="c5"><label for="c5"><b>Contato do decisor identificado</b><span>+5</span></label></div>
+      </div>
+      <label class="f">Unidades representadas</label>
+      <input type="number" id="q-unid" value="20" min="1">
+    </div>
+
+    <div class="panel">
+      <h3>Oportunidade Qualificada</h3>
+      <div class="sub">Os seis precisam estar confirmados na fala do interlocutor. Score alto sem isto é só hipótese bem pontuada.</div>
+      <div class="chk"><input type="checkbox" class="qq" id="k1"><label for="k1"><b>Decisor identificado e falado</b><span>Você conversou com quem decide, não com quem atende.</span></label></div>
+      <div class="chk"><input type="checkbox" class="qq" id="k2"><label for="k2"><b>Número de unidades confirmado por ele</b><span>Substitui a hipótese do script pelo número real.</span></label></div>
+      <div class="chk"><input type="checkbox" class="qq" id="k3"><label for="k3"><b>Dor confirmada na fala dele</b><span>Ele nomeou o problema. Você não o sugeriu.</span></label></div>
+      <div class="chk"><input type="checkbox" class="qq" id="k4"><label for="k4"><b>Prazo ou disponibilidade conhecido</b><span>Quando as unidades ficam livres, ou quando a decisão acontece.</span></label></div>
+      <div class="chk"><input type="checkbox" class="qq" id="k5"><label for="k5"><b>Próximo passo agendado com data</b><span>Data no calendário, não "me liga depois".</span></label></div>
+      <div class="chk"><input type="checkbox" class="qq" id="k6"><label for="k6"><b>Sem impeditivo conhecido</b><span>Exclusividade vigente, ticket fora de faixa, ou pendência HIS/HMP.</span></label></div>
+      <div class="scorebox" style="margin:16px 0 0"><div class="n" id="q-crit">0 / 6</div><div class="l" id="q-lbl">ainda não qualificada</div></div>
+      <div class="note"><b>HIS e HMP:</b> se houver unidade enquadrada, o Decreto 64.244/2025 exige certidão de renda, impõe teto de 30% da renda de referência e veda locação por temporada. Marque o impeditivo até o jurídico liberar.</div>
+    </div>
+  </div></div>
+</section>
+
+<!-- SCRIPTS -->
+<section id="t-scripts">
+  <header class="pg">
+    <h1>Scripts</h1>
+    <p>Cada plataforma tem uma extração diferente e um alvo diferente. Rode no seu terminal, registre a execução aqui, e traga o resultado para a fila.</p>
+  </header>
+  <div class="stack" id="scripts"></div>
+</section>
+
+<!-- METAS -->
+<section id="t-metas">
+  <header class="pg">
+    <h1>Metas</h1>
+    <p>500 unidades por mês são 25 por dia útil. Quatrocentas delas vêm de lote — por isso duas administradoras fechadas valem mais do que um mês inteiro de prospecção unitária.</p>
+  </header>
+  <div class="stack">
+    <div class="panel">
+      <h3>Mix de canais</h3>
+      <div class="sub">Meta mensal por canal e o que já está em pipeline.</div>
+      <table><thead><tr><th>Canal</th><th class="num">Meta/mês</th><th class="num">Unid. por negócio</th><th class="num">Negócios/mês</th><th class="num">Em pipeline</th></tr></thead>
+      <tbody id="mix"></tbody></table>
+    </div>
+    <div class="panel">
+      <h3>Fechamento do dia</h3>
+      <div class="sub">Quatro perguntas às 18h. Sem elas o dia gerou atividade, não aprendizado.</div>
+      <label class="f">Quantas unidades representadas foram tocadas hoje?</label><input type="text" id="d1">
+      <label class="f">Qual objeção apareceu mais de uma vez?</label><input type="text" id="d2">
+      <label class="f">Qual organização tem carteira maior do que a hipótese sugeria?</label><input type="text" id="d3">
+      <label class="f">O que muda na fila de amanhã?</label><textarea id="d4"></textarea>
+      <div style="margin-top:14px"><button class="btn" id="savefech">Salvar fechamento</button></div>
+    </div>
+  </div>
+</section>
+</main>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="auth-gate" id="auth-gate">
+  <form class="auth-card" id="login-form">
+    <div class="brand"><b>Supply Hunter</b><span>7Cantos · São Paulo</span></div>
+    <h1>Acesso do time</h1>
+    <p>Entre com o usuário convidado no projeto Supabase.</p>
+    <label class="f" for="login-email">E-mail</label>
+    <input type="email" id="login-email" autocomplete="email" required>
+    <label class="f" for="login-password">Senha</label>
+    <input type="password" id="login-password" autocomplete="current-password" required>
+    <button class="btn" id="login-button" style="width:100%;margin-top:16px">Entrar</button>
+    <p class="error" id="login-error" role="alert"></p>
+  </form>
+</div>
+
+<dialog class="modal" id="contact-modal">
+  <form class="modal-card" id="contact-form" method="dialog">
+    <div class="modal-head"><div><h2>Registrar contato</h2><p class="sub" id="contact-opportunity"></p></div><button class="modal-close" type="button" data-close-contact aria-label="Fechar">×</button></div>
+    <input type="hidden" id="contact-id">
+    <div class="grid2">
+      <div><label class="f" for="contact-name">Pessoa</label><input type="text" id="contact-name" placeholder="Nome informado na conversa"></div>
+      <div><label class="f" for="contact-role">Cargo</label><input type="text" id="contact-role" placeholder="Ex.: sócio, síndica"></div>
+      <div><label class="f" for="contact-channel">Canal</label><select id="contact-channel"><option>Telefone</option><option>Portal</option><option>E-mail</option><option>WhatsApp</option><option>LinkedIn</option><option>Presencial</option></select></div>
+      <div><label class="f" for="contact-units">Unidades confirmadas</label><input type="number" id="contact-units" min="1" placeholder="Deixe vazio se não confirmou"><p class="hint">Número dito pelo interlocutor, nunca estimativa.</p></div>
+      <div><label class="f" for="contact-criteria">Critérios confirmados</label><input type="number" id="contact-criteria" min="0" max="6" value="0"></div>
+      <div><label class="f" for="contact-response">Reação</label><select id="contact-response"><option value="">Não informada</option><option>Interesse</option><option>Neutro</option><option>Recusa</option><option>Sem resposta</option></select></div>
+    </div>
+    <label class="f" for="contact-notes">Notas e objeção na frase dele</label><textarea id="contact-notes"></textarea>
+    <div class="grid2">
+      <div><label class="f" for="contact-next">Próxima ação</label><input type="text" id="contact-next" placeholder="Ex.: diagnóstico com o sócio"></div>
+      <div><label class="f" for="contact-next-at">Data do próximo passo</label><input type="datetime-local" id="contact-next-at"></div>
+    </div>
+    <div class="form-actions"><button class="btn ghost" type="button" data-close-contact>Cancelar</button><button class="btn" id="contact-save" value="default">Salvar contato</button></div>
+  </form>
+</dialog>
+
+<script src="./config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.106.2/dist/umd/supabase.min.js"></script>
+<script src="./app.js"></script>
