@@ -10,17 +10,30 @@ portais → collector/coletor_v0.py → Supabase/Postgres → cockpit
                                Auth + RLS do time
 ```
 
-O cockpit continua estático e sem build. O design system da 7Cantos está em `index.html`; a persistência, autenticação e regras de interface estão em `app.js`.
+O cockpit continua estático e sem build. O design system da 7Cantos está em `public/index.html`; a persistência, autenticação e regras de interface estão em `public/app.js`.
 
 ## 1. Configurar o Supabase
 
-Crie um projeto e aplique a migração e o seed:
+**Não é necessário instalar Docker nem Postgres local.** O banco roda no Supabase hospedado.
+
+O projeto hospedado `supply-hunter-cockpit` já está criado e recebeu as migrações. Para vincular outra máquina:
 
 ```bash
 npx --yes supabase@2.109.1 login
-npx --yes supabase@2.109.1 link --project-ref SEU_PROJECT_REF
+npx --yes supabase@2.109.1 link --project-ref etoycmxfntqfukhxyngm
+npx --yes supabase@2.109.1 migration list --linked
+```
+
+Para enviar uma nova migração no futuro:
+
+```bash
+npx --yes supabase@2.109.1 db push --dry-run
 npx --yes supabase@2.109.1 db push
 ```
+
+Esses comandos acessam o projeto remoto e não iniciam containers. Se o `link` pedir uma senha, use a senha do banco definida nas configurações do projeto — não use uma API key.
+
+Alternativa sem CLI: abra **SQL Editor** no painel do Supabase e execute o novo arquivo de migração. O seed inicial já foi carregado.
 
 A migração cria RLS e grants explícitos. O acesso é permitido somente a usuários autenticados com este `app_metadata` definido pelo administrador:
 
@@ -30,20 +43,16 @@ A migração cria RLS e grants explícitos. O acesso é permitido somente a usu�
 
 Também é aceito `{"role":"admin"}`. Convide os usuários pelo Supabase Auth e mantenha cadastro público e login anônimo desativados.
 
-Copie a configuração pública do navegador:
-
-```bash
-cp config.example.js config.js
-```
-
-Edite `config.js` com a URL e a **publishable key**. Esse arquivo é ignorado pelo Git. Nunca coloque `sb_secret_...` ou a chave legada `service_role` nele.
+O arquivo `public/config.js` já contém a URL e a **publishable key** deste projeto e pode ser versionado: esses valores são públicos e dependem de RLS. Nunca coloque `sb_secret_...` ou a chave legada `service_role` nele.
 
 ## 2. Rodar o cockpit
 
 ```bash
-python3 -m http.server 8000
+python3 -m http.server 8000 --directory public
 # http://localhost:8000
 ```
+
+Sirva somente `public/`. A raiz contém `.env` com a secret key do coletor e nunca deve ser exposta por um servidor HTTP.
 
 A aplicação exige login. O formulário de contato grava a interação, unidades confirmadas, critérios de qualificação e próximo passo no Supabase. Nenhuma mensagem é enviada automaticamente.
 
@@ -71,9 +80,10 @@ A secret key é usada somente no processo Python local. Os seletores em `PORTAIS
 ## Estrutura
 
 ```
-index.html                         design system e markup do cockpit
-app.js                            Auth e persistência Supabase
-config.example.js                 modelo de configuração pública
+public/index.html                  design system e markup do cockpit
+public/app.js                     Auth e persistência Supabase
+public/config.js                  configuração pública do projeto hospedado
+public/config.example.js          modelo de configuração pública
 collector/coletor_v0.py           coleta, eventos, score e criação de alvos
 supabase/migrations/              esquema, RLS, índices e regras
 supabase/seed.sql                 dez oportunidades iniciais
@@ -90,15 +100,16 @@ CLAUDE.md                         contexto operacional permanente
 - Unidades HIS/HMP nunca entram em fluxo de curta temporada.
 - Campo desconhecido permanece `null`; estimativa é marcada como hipótese.
 
-## Validação local do banco
+## Validar o banco hospedado
 
-Com Docker disponível:
+Após aplicar a migração:
 
 ```bash
-npx --yes supabase@2.109.1 start
-npx --yes supabase@2.109.1 db reset
-npx --yes supabase@2.109.1 migration list --local
+npx --yes supabase@2.109.1 migration list --linked
+npx --yes supabase@2.109.1 db push --dry-run
 ```
+
+O segundo comando deve informar que não há novas migrações para aplicar.
 
 ## Publicar na Vercel
 

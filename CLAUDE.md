@@ -8,7 +8,7 @@ Contexto permanente deste repositório. Leia antes de qualquer alteração.
 
 Ferramenta de trabalho diária de um **Supply Hunter** — a pessoa que capta imóveis para locação long stay em São Paulo. Duas peças:
 
-1. **Cockpit** (`index.html`) — fila priorizada do dia, qualificação de oportunidade, runbook de scripts, metas. Estático, sem build, hospedado na Vercel.
+1. **Cockpit** (`public/index.html`) — fila priorizada do dia, qualificação de oportunidade, runbook de scripts, metas. Estático, sem build, hospedado na Vercel.
 2. **Coletor** (`collector/coletor_v0.py`) — roda localmente, varre portais, revela quem tem carteira, detecta eventos e pontua.
 
 A empresa: 7Cantos, gestora de patrimônio imobiliário especializada em long stay (contratos de 12 meses ou mais). Operação madura em Fortaleza com mais de 700 imóveis sob gestão. São Paulo é expansão nova — 165 unidades em 95 prédios.
@@ -138,7 +138,7 @@ portais  →  collector/coletor_v0.py  →  Supabase / Postgres  →  cockpit
                                        eventos e tarefas       Auth + RLS
 ```
 
-O cockpit é estático e sem build. `index.html` contém o design system da 7Cantos; `app.js` contém autenticação e persistência. O Supabase é a única fonte de verdade.
+O cockpit é estático e sem build. `public/index.html` contém o design system da 7Cantos; `public/app.js` contém autenticação e persistência. O Supabase é a única fonte de verdade. Nunca servir a raiz do repositório: ela contém `.env` com a secret key do coletor.
 
 ### Decisões de arquitetura
 

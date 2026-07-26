@@ -1,0 +1,14 @@
+create index agent_runs_created_by_idx on public.agent_runs (created_by);
+create index buildings_created_by_idx on public.buildings (created_by);
+create index daily_closings_created_by_idx on public.daily_closings (created_by);
+create index opportunities_building_id_idx on public.opportunities (building_id);
+create index opportunities_created_by_idx on public.opportunities (created_by);
+create index opportunities_organization_id_idx on public.opportunities (organization_id);
+create index organizations_created_by_idx on public.organizations (created_by);
+create index properties_created_by_idx on public.properties (created_by);
+create index property_listings_property_id_idx on public.property_listings (property_id);
+create index tasks_assigned_to_idx on public.tasks (assigned_to);
+create index tasks_created_by_idx on public.tasks (created_by);
+create index tasks_opportunity_id_idx on public.tasks (opportunity_id);
+create index touchpoints_approved_by_idx on public.touchpoints (approved_by);
+create index touchpoints_created_by_idx on public.touchpoints (created_by);
