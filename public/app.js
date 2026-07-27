@@ -20,6 +20,7 @@
   const $ = selector => document.querySelector(selector);
   let db;
   let user;
+  let sessionStarted = false;
   let opportunities = [];
   let runs = {};
 
@@ -325,11 +326,14 @@
   }
 
   async function startSession(session) {
+    if (sessionStarted) return;
+    sessionStarted = true;
     user = session.user;
     const role = user.app_metadata?.role;
     if (!['hunter', 'admin'].includes(role)) {
       $('#login-error').textContent = 'Usuário autenticado, mas sem app_metadata.role hunter/admin.';
       await db.auth.signOut();
+      sessionStarted = false;
       return;
     }
     $('#auth-gate').hidden = true;
@@ -348,6 +352,9 @@
       return;
     }
     db = window.supabase.createClient(config.url, config.publishableKey);
+    db.auth.onAuthStateChange((_event, session) => {
+      if (session) startSession(session).catch(error => setStatus(friendlyError(error), 'error'));
+    });
     const {data, error} = await db.auth.getSession();
     if (error) $('#login-error').textContent = friendlyError(error);
     if (data.session) await startSession(data.session);
@@ -362,6 +369,30 @@
         return;
       }
       await startSession(result.data.session);
+    });
+    $('#magic-link-button').addEventListener('click', async () => {
+      const email = $('#login-email').value.trim();
+      if (!email) {
+        $('#login-error').textContent = 'Informe seu e-mail para receber o link de acesso.';
+        return;
+      }
+      $('#magic-link-button').disabled = true;
+      $('#login-error').textContent = '';
+      try {
+        const result = await db.auth.signInWithOtp({
+          email,
+          options: {
+            shouldCreateUser: false,
+            emailRedirectTo: `${window.location.origin}${window.location.pathname}`
+          }
+        });
+        if (result.error) throw result.error;
+        $('#login-error').textContent = 'Link enviado. Abra o e-mail para entrar.';
+      } catch (error) {
+        $('#login-error').textContent = friendlyError(error);
+      } finally {
+        $('#magic-link-button').disabled = false;
+      }
     });
   }
 
