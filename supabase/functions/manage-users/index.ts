@@ -7,7 +7,10 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 const COMPANY_DOMAIN = "7cantos.com";
-const ROLES = ["hunter", "admin"];
+// 'demand' pertence ao cockpit do Demand Generator, que compartilha este banco
+// e, portanto, esta base de usuários. Quem tem papel demand não alcança as
+// tabelas do Supply — a separação é feita pela RLS, não por outra função.
+const ROLES = ["hunter", "admin", "demand"];
 const LOWER = "abcdefghijkmnopqrstuvwxyz";
 const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const DIGIT = "23456789";
