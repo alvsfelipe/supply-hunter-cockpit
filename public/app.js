@@ -169,9 +169,9 @@
     $('#scripts').innerHTML = SCRIPTS.map(script => `
       <div class="panel"><h3>${script.t}</h3><div class="sub">${script.alvo}</div>
       <table><tbody><tr><td style="width:130px;color:var(--mute)">Extrai</td><td>${script.extrai}</td></tr><tr><td style="color:var(--mute)">Limite</td><td>${script.nao}</td></tr><tr><td style="color:var(--mute)">Devolve</td><td>${script.ret}</td></tr></tbody></table>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px"><span class="tallyn">Comando</span><button class="copy" data-cp="${script.id}">Copiar</button></div>
+      <div class="script-command-head"><span class="tallyn">Comando</span><button class="copy" data-cp="${script.id}">Copiar</button></div>
       <pre id="cmd-${script.id}">${escapeHtml(script.cmd)}</pre>
-      <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+      <div class="script-controls">
         ${script.collect ? `
           <select aria-label="Bairro" data-collect-neighborhood="${script.id}" style="width:auto">${neighborhoodOptions}</select>
           <input aria-label="Quantidade de fichas" data-collect-count="${script.id}" type="number" min="1" max="3" value="1" style="width:72px">
@@ -481,6 +481,7 @@
       button.addEventListener('click', () => {
         document.querySelectorAll('nav button[data-t]').forEach(item => item.setAttribute('aria-current', item === button));
         document.querySelectorAll('section').forEach(section => section.classList.toggle('on', section.id === `t-${button.dataset.t}`));
+        if (window.matchMedia('(max-width: 860px)').matches) button.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'center'});
         window.scrollTo(0, 0);
       });
     });
