@@ -31,8 +31,13 @@ assert.match(html, /src="\.\/auth\.js"/);
 assert.doesNotMatch(html, /id="magic-link-button"/);
 assert.match(app, /resetPasswordForEmail/);
 assert.match(app, /event === 'PASSWORD_RECOVERY'/);
-assert.match(app, /updateUser\(\{password\}\)/);
+assert.match(app, /\{password\}\s*\n?\s*\);/);
+// Primeiro acesso: senha temporária obriga troca antes de liberar o cockpit.
+assert.match(app, /must_change_password === true/);
+assert.match(app, /must_change_password: false/);
+assert.match(app, /showFirstAccessPassword/);
 assert.match(config, /enable_signup = false/);
+assert.match(config, /\[functions\.manage-users\]\nverify_jwt = true/);
 assert.match(config, /minimum_password_length = 12/);
 assert.match(config, /password_requirements = "lower_upper_letters_digits_symbols"/);
 

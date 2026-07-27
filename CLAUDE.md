@@ -30,6 +30,10 @@ A empresa: 7Cantos, gestora de patrimônio imobiliário especializada em long st
 
 **Quatrocentas das quinhentas vêm de lote. Duas administradoras fechadas por mês são 40% da meta.**
 
+Desde 27/07/2026 a meta e este mix são **dados, não constantes**: vivem em `monthly_goals` e `goal_channels`, uma linha por mês, editáveis só por admin na aba Administração. Os 500 acima são o valor semeado pela migração, não um número gravado no código. A meta do dia é derivada — meta do mês dividida pelos dias úteis declarados — e nunca é digitada.
+
+Atenção ao operar: a soma do mix desta tabela é **550**, não 500. A divergência veio da documentação original e a tela de administração agora a exibe em vez de escondê-la. Ou o mix cai 50 unidades, ou a meta sobe — é decisão de WBR, não de código.
+
 Consequência que governa o código: o coletor existe para **revelar organizações que já detêm carteira**, não para gerar leads unitários. Anunciante com 5 ou mais anúncios ativos é uma administradora, um investidor ou uma imobiliária — esse é o achado. O anúncio individual é só o sinal que revela a organização.
 
 Se alguma alteração otimizar volume de anúncios unitários em vez de descoberta de carteira, ela está otimizando o pior canal. Não faça.
@@ -174,7 +178,13 @@ organizations     id, name, type, website, estimated_units, polo, source
 
 opportunities     id, type, organization_id, building_id, polo, units_represented,
                   supply_score, priority_score, stage, owner, next_action, next_action_at,
-                  qualified_criteria (0..6)
+                  qualified_criteria (0..6), signed_at
+
+monthly_goals     id, month (único, primeiro dia), units_target, working_days, notes
+                  leitura para hunter e admin; escrita só admin
+
+goal_channels     id, goal_id, channel, units_target, units_per_deal, sort_order
+                  o mix do mês; mesma regra de RLS de monthly_goals
 
 tasks             id, opportunity_id, assigned_to, task_type, priority, reason,
                   suggested_action, due_at, status, outcome
@@ -190,6 +200,8 @@ agent_runs        id, script, started_at, finished_at, rows_in, rows_out, cost
 ```
 
 `agent_runs.cost` existe para que o CAC de supply inclua o custo do próprio agente. Sem isso o CAC sai errado.
+
+`opportunities.signed_at` é carimbada por trigger na transição para `Assinada` e zerada se a oportunidade sair desse estágio. Sem ela não existe curva de realizado por dia, só total acumulado. As linhas que já estavam `Assinada` antes de 27/07/2026 foram preenchidas com `updated_at` — aproximação declarada no comentário da coluna, não data confirmada.
 
 ---
 
@@ -218,13 +230,14 @@ Sempre respeitar `robots.txt` e termos de uso. Para volume sério, migrar para A
 
 ## Estado atual e próximo trabalho
 
-**Pronto:** repositório Git isolado; cockpit com login e persistência Supabase; entrada rápida OLX; adaptadores Meu Imóvel e Ghar executáveis pela interface autenticada; formulário de contato; migração com RLS; coletor Python integrado ao Supabase; dez alvos no seed; base de 95 prédios pontuada; 27 organizações mapeadas na documentação de origem.
+**Pronto:** repositório Git isolado; cockpit com login e persistência Supabase; entrada rápida OLX; adaptadores Meu Imóvel e Ghar executáveis pela interface autenticada; formulário de contato; migração com RLS; coletor Python integrado ao Supabase; dez alvos no seed; base de 95 prédios pontuada; 27 organizações mapeadas na documentação de origem; meta mensal configurável com cascata para o dia; gráfico previsto x realizado; criação de usuário pela interface com senha temporária de uso único e troca obrigatória no primeiro acesso.
 
 **Aberto, em ordem:**
 
 1. Radar de entregas via VivaReal com filtro "pronto para morar" nos bairros de Z1 e Z2
 2. Exibir histórico de interações por oportunidade no cockpit
 3. Importar a base pontuada de edifícios para `buildings`
+4. Decidir no WBR se o mix por canal cai para 500 ou se a meta sobe para 550
 
 **Anti-metas — não construa:**
 

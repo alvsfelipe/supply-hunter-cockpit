@@ -130,6 +130,44 @@ pre b{color:#F0C99A;font-weight:400}
   font-size:13px;border-radius:0 var(--r) var(--r) 0;margin:14px 0}
 .note b{font-weight:600}
 
+/* meta: gráfico e edição */
+.chart-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.chart-month{display:flex;flex-direction:column;gap:2px}
+.chart-month .f{margin:0}
+.chart-month input{width:auto;min-width:150px}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--mute);margin:2px 0 12px}
+.legend span{display:flex;align-items:center;gap:7px}
+.swatch{width:16px;height:0;border-top-width:2px;border-top-style:solid;display:inline-block}
+.swatch.planned{border-top-color:#4D8EF0;border-top-style:dashed}
+.swatch.realized{border-top-color:#DD6435}
+.chart-wrap{position:relative}
+.chart{overflow-x:auto}
+.chart svg{width:100%;min-width:520px;height:auto;display:block}
+.chart .hit:hover{fill:#4D8EF01A}
+.chart-tip{position:absolute;pointer-events:none;background:var(--ink);color:#fff;font-size:11.5px;
+  font-family:"IBM Plex Mono";padding:7px 9px;border-radius:var(--r);white-space:nowrap;transform:translate(-50%,-100%);z-index:2}
+.chart-tip b{display:block;font-family:Inter,sans-serif;font-weight:600;margin-bottom:3px}
+.pace{font-size:13px;margin-top:12px;padding:11px 14px;border-radius:var(--r);background:var(--pine-l)}
+.pace[data-state="behind"]{background:var(--brick-l)}
+.pace b{font-weight:600}
+.chart-table{margin-top:12px;font-size:13px}
+.chart-table summary{cursor:pointer;color:var(--mute);font-size:12.5px}
+.chart-table table{margin-top:10px}
+.sub-head{font-size:13px;font-weight:700;margin:22px 0 8px}
+.channel-table input{width:100%;min-width:70px}
+.channel-table td{vertical-align:middle}
+.channel-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+.goal-derived{font-family:"IBM Plex Mono";font-size:20px;font-weight:600;padding:9px 0}
+.row-drop{border:none;background:none;color:var(--mute);font-size:16px;line-height:1;padding:0 4px}
+.row-drop:hover{color:var(--brick)}
+.user-form{margin-top:20px;padding-top:18px;border-top:1px solid var(--rule)}
+.temp-password{margin-top:16px;border-left:3px solid var(--pine);background:var(--pine-l);
+  padding:13px 15px;border-radius:0 var(--r) var(--r) 0}
+.temp-password code{display:block;font-family:"IBM Plex Mono";font-size:16px;letter-spacing:.06em;
+  background:#fff;border:1px solid var(--rule);border-radius:var(--r);padding:9px 11px;margin:9px 0;
+  user-select:all;overflow-wrap:anywhere}
+.temp-password p{font-size:12px;color:var(--mute);margin-bottom:9px}
+
 .stack{display:flex;flex-direction:column;gap:22px;padding:24px 30px}
 .empty{padding:40px 30px;color:var(--mute);font-size:14px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);
@@ -372,6 +410,7 @@ button:disabled{cursor:not-allowed;opacity:.55}
   <button data-t="qual">Qualificar</button>
   <button data-t="scripts">Scripts</button>
   <button data-t="metas">Metas</button>
+  <button data-t="admin" id="nav-admin" hidden>Administração</button>
   <div class="session" id="session" hidden><strong id="session-email"></strong><button id="logout">Sair</button></div>
   <div class="navfoot">Contato entra por ação humana.<br>Nenhum envio sem aprovação.</div>
 </nav>
@@ -379,10 +418,11 @@ button:disabled{cursor:not-allowed;opacity:.55}
 <main>
 <div class="statusline" id="sync-status">Conectando ao Supabase…</div>
 <div class="strip">
-  <div><span class="k">Meta do mês</span><span class="v" id="s-meta">500 <small>unid.</small></span></div>
-  <div><span class="k">Assinadas</span><span class="v" id="s-ass">0</span></div>
+  <div><span class="k">Meta do mês</span><span class="v" id="s-meta">— <small>unid.</small></span></div>
+  <div><span class="k">Meta do dia útil</span><span class="v" id="s-dia">— <small>unid.</small></span></div>
+  <div><span class="k">Assinadas no mês</span><span class="v" id="s-ass">0</span></div>
   <div><span class="k">Em pipeline</span><span class="v" id="s-pipe">0 <small>unid. repres.</small></span></div>
-  <div class="gap"><span class="k">Gap</span><span class="v" id="s-gap">500</span></div>
+  <div class="gap"><span class="k">Gap</span><span class="v" id="s-gap">—</span></div>
   <div class="bar"><span class="k">Ritmo do mês</span><div class="track"><div class="fill" id="s-fill" style="width:0"></div></div></div>
 </div>
 
@@ -404,7 +444,7 @@ button:disabled{cursor:not-allowed;opacity:.55}
   <div class="stack">
     <div class="panel">
       <h3>Funil por unidades representadas</h3>
-      <div class="sub">O funil conta unidades, não negócios. É assim que se enxerga se 500 fecha.</div>
+      <div class="sub">O funil conta unidades, não negócios. É assim que se enxerga se a meta do mês fecha.</div>
       <table><thead><tr><th>Etapa</th><th class="num">Negócios</th><th class="num">Unid. representadas</th></tr></thead>
       <tbody id="funil"></tbody></table>
     </div>
@@ -592,13 +632,29 @@ button:disabled{cursor:not-allowed;opacity:.55}
 <section id="t-metas">
   <header class="pg">
     <h1>Metas</h1>
-    <p>500 unidades por mês são 25 por dia útil. Quatrocentas delas vêm de lote — por isso duas administradoras fechadas valem mais do que um mês inteiro de prospecção unitária.</p>
+    <p id="metas-intro">A meta mensal cascateia para o dia útil. A maior parte vem de lote — por isso duas administradoras fechadas valem mais do que um mês inteiro de prospecção unitária.</p>
   </header>
   <div class="stack">
     <div class="panel">
+      <div class="chart-head">
+        <div>
+          <h3>Previsto x realizado</h3>
+          <div class="sub" id="chart-sub">Unidades representadas acumuladas no mês.</div>
+        </div>
+        <label class="chart-month"><span class="f">Mês</span><input type="month" id="goal-view-month"></label>
+      </div>
+      <div class="legend">
+        <span><i class="swatch planned"></i>Previsto — ritmo da meta em dias úteis</span>
+        <span><i class="swatch realized"></i>Realizado — unidades assinadas</span>
+      </div>
+      <div class="chart-wrap"><div class="chart" id="chart-goal"></div><div class="chart-tip" id="chart-tip" hidden></div></div>
+      <div class="pace" id="chart-pace"></div>
+      <details class="chart-table"><summary>Ver como tabela</summary><table><thead><tr><th>Dia</th><th class="num">Previsto acum.</th><th class="num">Realizado acum.</th></tr></thead><tbody id="chart-rows"></tbody></table></details>
+    </div>
+    <div class="panel">
       <h3>Mix de canais</h3>
-      <div class="sub">Meta mensal por canal e o que já está em pipeline.</div>
-      <table><thead><tr><th>Canal</th><th class="num">Meta/mês</th><th class="num">Unid. por negócio</th><th class="num">Negócios/mês</th><th class="num">Em pipeline</th></tr></thead>
+      <div class="sub">Meta mensal por canal, o que já está em pipeline e o que assinou no mês.</div>
+      <table><thead><tr><th>Canal</th><th class="num">Meta/mês</th><th class="num">Unid. por negócio</th><th class="num">Negócios/mês</th><th class="num">Em pipeline</th><th class="num">Assinado</th></tr></thead>
       <tbody id="mix"></tbody></table>
     </div>
     <div class="panel">
@@ -609,6 +665,62 @@ button:disabled{cursor:not-allowed;opacity:.55}
       <label class="f">Qual organização tem carteira maior do que a hipótese sugeria?</label><input type="text" id="d3">
       <label class="f">O que muda na fila de amanhã?</label><textarea id="d4"></textarea>
       <div style="margin-top:14px"><button class="btn" id="savefech">Salvar fechamento</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ADMIN -->
+<section id="t-admin">
+  <header class="pg">
+    <h1>Administração</h1>
+    <p>Meta do mês e acesso do time. Visível apenas para contas com papel admin.</p>
+  </header>
+  <div class="stack">
+    <form class="panel" id="goal-form">
+      <h3>Meta do mês</h3>
+      <div class="sub">A meta mensal divide pelos dias úteis e vira a meta do dia. Alteração aqui muda a fila, o gap e o gráfico.</div>
+      <div class="grid2">
+        <div><label class="f" for="goal-month">Mês</label><input type="month" id="goal-month" required></div>
+        <div><label class="f" for="goal-units">Meta de unidades</label><input type="number" id="goal-units" min="1" step="1" required></div>
+        <div>
+          <label class="f" for="goal-working-days">Dias úteis</label>
+          <input type="number" id="goal-working-days" min="1" max="31" step="1" required>
+          <p class="hint" id="goal-working-hint"></p>
+        </div>
+        <div><label class="f">Meta por dia útil</label><div class="goal-derived" id="goal-daily">—</div><p class="hint">Calculado. É o número que o fechamento das 18h compara.</p></div>
+      </div>
+      <label class="f" for="goal-notes">Nota da decisão</label>
+      <input type="text" id="goal-notes" placeholder="Ex.: meta revisada no WBR de 27/07">
+      <h4 class="sub-head">Mix por canal</h4>
+      <table class="channel-table"><thead><tr><th>Canal</th><th class="num">Meta/mês</th><th class="num">Unid. por negócio</th><th class="num">Negócios/mês</th><th></th></tr></thead>
+      <tbody id="goal-channels"></tbody></table>
+      <div class="channel-foot">
+        <button class="btn ghost" type="button" id="goal-add-channel">Adicionar canal</button>
+        <span class="tallyn" id="goal-channel-total"></span>
+      </div>
+      <div class="form-actions"><button class="btn" id="goal-save" type="submit">Salvar meta</button></div>
+      <p class="auth-feedback" id="goal-message" role="status"></p>
+    </form>
+
+    <div class="panel">
+      <h3>Usuários</h3>
+      <div class="sub">O usuário nasce com senha temporária de uso único e é obrigado a trocá-la no primeiro acesso.</div>
+      <table><thead><tr><th>E-mail</th><th>Papel</th><th>Último acesso</th><th>Status</th></tr></thead>
+      <tbody id="user-rows"></tbody></table>
+      <form class="user-form" id="user-form">
+        <div class="grid2">
+          <div><label class="f" for="user-email">E-mail corporativo</label><input type="email" id="user-email" placeholder="nome@7cantos.com" required></div>
+          <div><label class="f" for="user-role">Papel</label><select id="user-role"><option value="hunter">hunter</option><option value="admin">admin</option></select></div>
+        </div>
+        <div class="form-actions"><button class="btn" id="user-save" type="submit">Criar usuário</button></div>
+      </form>
+      <div class="temp-password" id="user-created" hidden>
+        <b>Senha temporária de <span id="user-created-email"></span></b>
+        <code id="user-created-password"></code>
+        <p>Aparece uma única vez. Repasse por canal seguro — ela expira no primeiro acesso, quando a pessoa define a própria senha.</p>
+        <button class="copy" type="button" id="user-copy-password">Copiar senha</button>
+      </div>
+      <p class="auth-feedback" id="user-message" role="status"></p>
     </div>
   </div>
 </section>
@@ -643,8 +755,8 @@ button:disabled{cursor:not-allowed;opacity:.55}
     </form>
 
     <form class="auth-view" id="new-password-form" hidden>
-      <h1>Criar nova senha</h1>
-      <p>Defina uma senha forte para concluir a recuperação.</p>
+      <h1 id="new-password-title">Criar nova senha</h1>
+      <p id="new-password-lead">Defina uma senha forte para concluir a recuperação.</p>
       <label class="f" for="new-password">Nova senha</label>
       <input type="password" id="new-password" autocomplete="new-password" minlength="12" required>
       <p class="password-rules">Mínimo de 12 caracteres, com maiúscula, minúscula, número e símbolo.</p>
@@ -697,4 +809,5 @@ button:disabled{cursor:not-allowed;opacity:.55}
 <script src="./radar.js"></script>
 <script src="./enrichment.js"></script>
 <script src="./auth.js"></script>
+<script src="./goals.js"></script>
 <script src="./app.js"></script>

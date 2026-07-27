@@ -2,14 +2,6 @@
   'use strict';
 
   const STAGES = ['Identificado', 'Pesquisado', 'Contatado', 'Diagnóstico', 'Qualificada', 'Proposta', 'Assinada', 'Perdida'];
-  const CANAIS = [
-    ['Carteira / administradora', 200, 100],
-    ['Incorporadora', 100, 40],
-    ['Edifício / densificação', 100, 20],
-    ['Investidor PF', 50, 8],
-    ['Indicação', 50, 2],
-    ['Unitário', 50, 1]
-  ];
   const SCRIPTS = [
     {id:'olx', t:'OLX', alvo:'Revelar quem tem carteira', extrai:'Identidade do anunciante, quantidade de anúncios ativos por anunciante, dias no ar, variação de preço, bairro, área e tipologia.', nao:'Fluxo manual assistido: não faz scraping nem extrai telefone. Gere a busca, use a aba Entrada rápida e revise antes de salvar.', cmd:'python collector/coletor_v0.py --mostrar-url --bairro moema --preco-min 3000 --preco-max 6000', ret:'URL pronta para abrir e registrar manualmente os anunciantes recorrentes.'},
     {id:'vr', t:'VivaReal e ZAP', alvo:'Radar de entregas e vacância de estreia', extrai:'Adaptador ainda não configurado.', nao:'Nenhuma coleta é executada até validar fonte, termos e campos públicos.', cmd:'Ainda não configurado — próximo portal', ret:'Sem dados nesta versão.'},
@@ -18,9 +10,17 @@
   ];
 
   const $ = selector => document.querySelector(selector);
+  const goalsApi = window.SupplyHunterGoals;
   let db;
   let user;
+  let isAdmin = false;
   let sessionStarted = false;
+  let goals = [];
+  let goalChannels = [];
+  let viewMonth = goalsApi.monthKey(new Date());
+  let users = [];
+  let goalFormDirty = false;
+  let passwordMode = 'recovery';
   let opportunities = [];
   let buildings = [];
   let organizations = new Map();
@@ -76,14 +76,16 @@
 
   async function loadData() {
     setStatus('Sincronizando com o Supabase…');
-    const [opportunityResult, buildingResult, organizationResult, runResult, clayCompanyResult, clayContactResult, clayLinkResult] = await Promise.all([
+    const [opportunityResult, buildingResult, organizationResult, runResult, clayCompanyResult, clayContactResult, clayLinkResult, goalResult, goalChannelResult] = await Promise.all([
       db.from('opportunities').select('*').order('priority_score', {ascending: false}),
       db.from('buildings').select('*').order('last_seen_at', {ascending: false}),
       db.from('organizations').select('id,name'),
       db.from('agent_runs').select('script,finished_at').eq('status', 'completed').order('finished_at', {ascending: false}).limit(50),
       db.from('clay_companies').select('*').order('name'),
       db.from('clay_contacts').select('*').order('name'),
-      db.from('clay_company_opportunities').select('*')
+      db.from('clay_company_opportunities').select('*'),
+      db.from('monthly_goals').select('*').order('month', {ascending: false}),
+      db.from('goal_channels').select('*').order('sort_order')
     ]);
     if (opportunityResult.error) throw opportunityResult.error;
     if (buildingResult.error) throw buildingResult.error;
@@ -92,6 +94,10 @@
     if (clayCompanyResult.error) throw clayCompanyResult.error;
     if (clayContactResult.error) throw clayContactResult.error;
     if (clayLinkResult.error) throw clayLinkResult.error;
+    if (goalResult.error) throw goalResult.error;
+    if (goalChannelResult.error) throw goalChannelResult.error;
+    goals = goalResult.data || [];
+    goalChannels = goalChannelResult.data || [];
     opportunities = opportunityResult.data || [];
     buildings = buildingResult.data || [];
     organizations = new Map((organizationResult.data || []).map(item => [item.id, item.name]));
@@ -132,13 +138,31 @@
       </div>`).join('');
   }
 
+  function goalForMonth(month) {
+    return goals.find(item => item.month === month) || null;
+  }
+
+  function channelsForGoal(goal) {
+    return goal ? goalChannels.filter(item => item.goal_id === goal.id) : [];
+  }
+
+  // Sem meta cadastrada o cockpit não inventa 500: mostra que falta cadastrar.
   function renderSummary() {
-    const signed = opportunities.filter(item => item.stage === 'Assinada').reduce((sum, item) => sum + item.units_represented, 0);
+    const month = goalsApi.monthKey(new Date());
+    const goal = goalForMonth(month);
+    const planned = goal ? goalsApi.plannedSeries({month, unitsTarget: goal.units_target, workingDays: goal.working_days}) : [];
+    const realized = goalsApi.realizedSeries(opportunities, {month});
+    const progress = goal ? goalsApi.pace({planned, realized, month}) : null;
+    const signed = progress ? progress.realizedToDate : 0;
     const pipeline = opportunities.filter(item => !['Assinada', 'Perdida'].includes(item.stage)).reduce((sum, item) => sum + item.units_represented, 0);
+    $('#s-meta').innerHTML = goal ? `${goal.units_target} <small>unid.</small>` : '— <small>sem meta</small>';
+    $('#s-dia').innerHTML = goal
+      ? `${goalsApi.formatDaily(goalsApi.dailyTarget(goal.units_target, goal.working_days))} <small>unid.</small>`
+      : '— <small>unid.</small>';
     $('#s-ass').textContent = signed;
     $('#s-pipe').innerHTML = `${pipeline} <small>unid. repres.</small>`;
-    $('#s-gap').textContent = Math.max(0, 500 - signed);
-    $('#s-fill').style.width = `${Math.min(100, signed / 5)}%`;
+    $('#s-gap').textContent = goal ? Math.max(0, goal.units_target - signed) : '—';
+    $('#s-fill').style.width = goal ? `${Math.min(100, (signed / goal.units_target) * 100)}%` : '0';
   }
 
   function renderPipeline() {
@@ -175,10 +199,61 @@
   }
 
   function renderMix() {
-    $('#mix').innerHTML = CANAIS.map(([channel, target, perDeal]) => {
-      const pipeline = opportunities.filter(item => item.type === channel && !['Assinada', 'Perdida'].includes(item.stage)).reduce((sum, item) => sum + item.units_represented, 0);
-      return `<tr><td>${channel}</td><td class="num">${target}</td><td class="num">${perDeal}</td><td class="num">${(target / perDeal).toFixed(1)}</td><td class="num">${pipeline}</td></tr>`;
+    const goal = goalForMonth(viewMonth);
+    const rows = goalsApi.channelProgress(channelsForGoal(goal), opportunities, {month: viewMonth});
+    $('#mix').innerHTML = rows.map(row => `<tr>
+      <td>${escapeHtml(row.channel)}</td>
+      <td class="num">${row.unitsTarget}</td>
+      <td class="num">${row.unitsPerDeal}</td>
+      <td class="num">${row.dealsNeeded.toFixed(1)}</td>
+      <td class="num">${row.pipeline}</td>
+      <td class="num">${row.signed}</td>
+    </tr>`).join('');
+  }
+
+  function renderChart() {
+    const goal = goalForMonth(viewMonth);
+    const label = goalsApi.monthLabel(viewMonth);
+    if ($('#goal-view-month').value !== viewMonth.slice(0, 7)) $('#goal-view-month').value = viewMonth.slice(0, 7);
+    if (!goal) {
+      $('#chart-goal').innerHTML = '<div class="empty">Nenhuma meta cadastrada para este mês. Um admin define em Administração.</div>';
+      $('#chart-sub').textContent = `${label} · sem meta cadastrada`;
+      $('#chart-pace').textContent = '';
+      $('#chart-pace').removeAttribute('data-state');
+      $('#chart-rows').innerHTML = '';
+      return;
+    }
+    const planned = goalsApi.plannedSeries({month: viewMonth, unitsTarget: goal.units_target, workingDays: goal.working_days});
+    const realized = goalsApi.realizedSeries(opportunities, {month: viewMonth});
+    const progress = goalsApi.pace({planned, realized, month: viewMonth});
+    $('#chart-goal').innerHTML = goalsApi.chartSvg({planned, realized, unitsTarget: goal.units_target, month: viewMonth});
+    $('#chart-sub').textContent = `${label} · meta de ${goal.units_target} unidades em ${goal.working_days} dias úteis, ${goalsApi.formatDaily(goalsApi.dailyTarget(goal.units_target, goal.working_days))} por dia.`;
+    if (!progress.referenceDay) {
+      $('#chart-pace').textContent = 'Mês ainda não começou. A linha de previsto já mostra o ritmo exigido.';
+      $('#chart-pace').removeAttribute('data-state');
+    } else {
+      const behind = progress.delta < 0;
+      $('#chart-pace').innerHTML = behind
+        ? `Até o dia ${progress.referenceDay}: previsto <b>${progress.plannedToDate}</b>, realizado <b>${progress.realizedToDate}</b>. <b>${Math.abs(progress.delta)} unidades atrás do ritmo.</b>`
+        : `Até o dia ${progress.referenceDay}: previsto <b>${progress.plannedToDate}</b>, realizado <b>${progress.realizedToDate}</b>. <b>${progress.delta} unidades à frente do ritmo.</b>`;
+      $('#chart-pace').dataset.state = behind ? 'behind' : 'ahead';
+    }
+    $('#chart-rows').innerHTML = planned.map((point, index) => {
+      const value = realized[index]?.value;
+      return `<tr><td>${point.day}</td><td class="num">${Math.round(point.value)}</td><td class="num">${value == null ? '—' : Math.round(value)}</td></tr>`;
     }).join('');
+  }
+
+  function showChartTip(hit) {
+    const tip = $('#chart-tip');
+    const realized = hit.dataset.realized;
+    tip.innerHTML = `<b>Dia ${hit.dataset.day}</b>Previsto ${hit.dataset.planned}<br>Realizado ${realized === '' ? '—' : realized}`;
+    const chart = $('#chart-goal');
+    const svg = chart.querySelector('svg');
+    const scale = svg ? svg.getBoundingClientRect().width / 720 : 1;
+    tip.style.left = `${Number(hit.dataset.x) * scale - chart.scrollLeft}px`;
+    tip.style.top = `${Math.max(34, svg ? svg.getBoundingClientRect().height * 0.4 : 60)}px`;
+    tip.hidden = false;
   }
 
   function compactClayText(value, limit = 360) {
@@ -267,6 +342,162 @@
     }).join('');
   }
 
+  function goalChannelRow(channel = {}) {
+    return `<tr class="goal-channel-row">
+      <td><input type="text" class="gc-name" value="${escapeHtml(channel.channel || '')}" placeholder="Nome do canal" required></td>
+      <td class="num"><input type="number" class="gc-units" min="0" step="1" value="${channel.units_target ?? 0}" required></td>
+      <td class="num"><input type="number" class="gc-per-deal" min="1" step="1" value="${channel.units_per_deal ?? 1}" required></td>
+      <td class="num gc-deals">—</td>
+      <td><button class="row-drop" type="button" data-drop-channel aria-label="Remover canal">×</button></td>
+    </tr>`;
+  }
+
+  function updateGoalDerived() {
+    const units = Number($('#goal-units').value) || 0;
+    const workingDays = Number($('#goal-working-days').value) || 0;
+    $('#goal-daily').textContent = units && workingDays
+      ? goalsApi.formatDaily(goalsApi.dailyTarget(units, workingDays))
+      : '—';
+    let total = 0;
+    for (const row of document.querySelectorAll('.goal-channel-row')) {
+      const channelUnits = Number(row.querySelector('.gc-units').value) || 0;
+      const perDeal = Math.max(1, Number(row.querySelector('.gc-per-deal').value) || 1);
+      total += channelUnits;
+      row.querySelector('.gc-deals').textContent = (channelUnits / perDeal).toFixed(1);
+    }
+    const difference = total - units;
+    $('#goal-channel-total').textContent = difference === 0
+      ? `Mix soma ${total} — bate com a meta.`
+      : `Mix soma ${total}, ${difference > 0 ? `${difference} acima` : `${Math.abs(difference)} abaixo`} da meta de ${units}.`;
+  }
+
+  function updateWorkingDaysHint() {
+    const value = $('#goal-month').value;
+    if (!value) return;
+    const {year, month} = goalsApi.parseMonthKey(`${value}-01`);
+    const suggested = goalsApi.workingDaysInMonth(year, month);
+    $('#goal-working-hint').textContent = `Segunda a sexta em ${goalsApi.monthLabel(`${value}-01`)}: ${suggested}. Desconte feriados manualmente.`;
+    return suggested;
+  }
+
+  function renderGoalForm({resetMonth = false} = {}) {
+    if (!isAdmin) return;
+    if (resetMonth || !$('#goal-month').value) $('#goal-month').value = viewMonth.slice(0, 7);
+    const month = `${$('#goal-month').value}-01`;
+    const goal = goalForMonth(month);
+    const suggested = updateWorkingDaysHint();
+    $('#goal-units').value = goal ? goal.units_target : '';
+    $('#goal-working-days').value = goal ? goal.working_days : suggested;
+    $('#goal-notes').value = goal?.notes || '';
+    const channels = goal ? channelsForGoal(goal) : goalsApi.DEFAULT_CHANNELS;
+    $('#goal-channels').innerHTML = channels.map(goalChannelRow).join('');
+    updateGoalDerived();
+  }
+
+  async function saveGoal(event) {
+    event.preventDefault();
+    const month = `${$('#goal-month').value}-01`;
+    const units = Number($('#goal-units').value);
+    const workingDays = Number($('#goal-working-days').value);
+    if (!Number.isInteger(units) || units < 1) return setAuthFeedback('#goal-message', 'A meta precisa ser um número inteiro maior que zero.', 'error');
+    if (!Number.isInteger(workingDays) || workingDays < 1 || workingDays > 31) return setAuthFeedback('#goal-message', 'Dias úteis precisa ficar entre 1 e 31.', 'error');
+    const rows = [...document.querySelectorAll('.goal-channel-row')].map((row, index) => ({
+      channel: row.querySelector('.gc-name').value.trim(),
+      units_target: Number(row.querySelector('.gc-units').value) || 0,
+      units_per_deal: Number(row.querySelector('.gc-per-deal').value) || 1,
+      sort_order: index + 1
+    }));
+    if (rows.some(row => !row.channel)) return setAuthFeedback('#goal-message', 'Todo canal precisa de nome.', 'error');
+    if (new Set(rows.map(row => row.channel)).size !== rows.length) return setAuthFeedback('#goal-message', 'Há canais repetidos no mix.', 'error');
+
+    $('#goal-save').disabled = true;
+    setAuthFeedback('#goal-message', 'Salvando…');
+    try {
+      const goalResult = await db.from('monthly_goals')
+        .upsert({month, units_target: units, working_days: workingDays, notes: $('#goal-notes').value.trim() || null}, {onConflict: 'month'})
+        .select().single();
+      if (goalResult.error) throw goalResult.error;
+      const deleteResult = await db.from('goal_channels').delete().eq('goal_id', goalResult.data.id);
+      if (deleteResult.error) throw deleteResult.error;
+      if (rows.length) {
+        const insertResult = await db.from('goal_channels').insert(rows.map(row => ({...row, goal_id: goalResult.data.id})));
+        if (insertResult.error) throw insertResult.error;
+      }
+      goalFormDirty = false;
+      await loadData();
+      renderGoalForm();
+      const difference = rows.reduce((sum, row) => sum + row.units_target, 0) - units;
+      setAuthFeedback('#goal-message', difference === 0
+        ? `Meta de ${goalsApi.monthLabel(month)} salva: ${units} unidades, ${goalsApi.formatDaily(goalsApi.dailyTarget(units, workingDays))} por dia útil.`
+        : `Meta salva, mas o mix não fecha com a meta (diferença de ${Math.abs(difference)} unidades). Próxima ação: acertar o mix ou a meta.`,
+      difference === 0 ? 'ok' : 'error');
+      toast('Meta atualizada.');
+    } catch (error) {
+      setAuthFeedback('#goal-message', friendlyError(error), 'error');
+    } finally {
+      $('#goal-save').disabled = false;
+    }
+  }
+
+  function renderUsers() {
+    if (!users.length) {
+      $('#user-rows').innerHTML = '<tr><td colspan="4">Nenhum usuário carregado.</td></tr>';
+      return;
+    }
+    $('#user-rows').innerHTML = users.map(item => `<tr>
+      <td>${escapeHtml(item.email)}</td>
+      <td>${escapeHtml(item.role || 'sem papel')}</td>
+      <td>${item.last_sign_in_at ? new Date(item.last_sign_in_at).toLocaleDateString('pt-BR') : 'nunca entrou'}</td>
+      <td>${item.must_change_password ? '<span class="tag b">senha temporária</span>' : '<span class="tag g">ativo</span>'}</td>
+    </tr>`).join('');
+  }
+
+  async function callUserFunction(body) {
+    const {data, error} = await db.functions.invoke('manage-users', {body});
+    if (error) {
+      const detail = await error.context?.json?.().catch(() => null);
+      throw new Error(detail?.error || error.message);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  async function loadUsers() {
+    if (!isAdmin) return;
+    try {
+      const data = await callUserFunction({action: 'list'});
+      users = data.users || [];
+      renderUsers();
+    } catch (error) {
+      $('#user-rows').innerHTML = '<tr><td colspan="4">Não foi possível carregar os usuários.</td></tr>';
+      setAuthFeedback('#user-message', friendlyError(error), 'error');
+    }
+  }
+
+  async function createUser(event) {
+    event.preventDefault();
+    const email = authRules.normalizeEmail($('#user-email').value);
+    if (!authRules.isAllowedCompanyEmail(email)) {
+      return setAuthFeedback('#user-message', 'Use um e-mail @7cantos.com.', 'error');
+    }
+    $('#user-save').disabled = true;
+    $('#user-created').hidden = true;
+    setAuthFeedback('#user-message', 'Criando usuário…');
+    try {
+      const data = await callUserFunction({action: 'create', email, role: $('#user-role').value});
+      $('#user-created-email').textContent = data.user.email;
+      $('#user-created-password').textContent = data.temporary_password;
+      $('#user-created').hidden = false;
+      $('#user-form').reset();
+      setAuthFeedback('#user-message', 'Usuário criado. Próxima ação: repassar a senha temporária por canal seguro.');
+      await loadUsers();
+    } catch (error) {
+      setAuthFeedback('#user-message', friendlyError(error), 'error');
+    } finally {
+      $('#user-save').disabled = false;
+    }
+  }
+
   function renderScripts() {
     const neighborhoodOptions = Object.keys(window.SupplyHunterQuickEntry?.neighborhoods || {})
       .map(neighborhood => `<option value="${neighborhood}"${neighborhood === 'moema' ? ' selected' : ''}>${neighborhoodLabel(neighborhood)}</option>`)
@@ -319,7 +550,9 @@
     renderPipeline();
     renderRadar();
     renderMix();
+    renderChart();
     renderClay();
+    if (isAdmin && !goalFormDirty) renderGoalForm();
   }
 
   function openPromotion(id) {
@@ -617,6 +850,42 @@
       if (event.target.classList.contains('qq')) calculateCriteria();
     });
 
+    $('#goal-view-month').addEventListener('change', event => {
+      if (!event.target.value) return;
+      viewMonth = `${event.target.value}-01`;
+      renderChart();
+      renderMix();
+    });
+
+    $('#chart-goal').addEventListener('pointerover', event => {
+      if (event.target.classList.contains('hit')) showChartTip(event.target);
+    });
+    $('#chart-goal').addEventListener('pointerleave', () => { $('#chart-tip').hidden = true; });
+
+    $('#goal-form').addEventListener('submit', saveGoal);
+    $('#goal-form').addEventListener('input', event => {
+      if (event.target.id !== 'goal-month') goalFormDirty = true;
+      updateGoalDerived();
+    });
+    $('#goal-month').addEventListener('change', () => {
+      goalFormDirty = false;
+      setAuthFeedback('#goal-message', '');
+      renderGoalForm();
+    });
+    $('#goal-add-channel').addEventListener('click', () => {
+      goalFormDirty = true;
+      $('#goal-channels').insertAdjacentHTML('beforeend', goalChannelRow());
+      updateGoalDerived();
+    });
+    $('#user-form').addEventListener('submit', createUser);
+    $('#user-copy-password').addEventListener('click', () => {
+      const password = $('#user-created-password').textContent;
+      navigator.clipboard?.writeText(password).then(
+        () => toast('Senha temporária copiada.'),
+        () => toast('Copie manualmente a senha temporária.')
+      );
+    });
+
     $('#q-unid').addEventListener('input', calculateScore);
     $('#clay-filter').addEventListener('change', renderClay);
     $('#clay-search').addEventListener('input', renderClay);
@@ -638,6 +907,11 @@
       const data = event.target.dataset;
       if (Object.hasOwn(data, 'closeContact')) $('#contact-modal').close();
       if (Object.hasOwn(data, 'closePromote')) $('#promote-modal').close();
+      if (Object.hasOwn(data, 'dropChannel')) {
+        goalFormDirty = true;
+        event.target.closest('tr').remove();
+        updateGoalDerived();
+      }
       if (data.promote) openPromotion(data.promote);
       if (data.log) openContact(data.log);
       if (data.del) {
@@ -722,6 +996,13 @@
       sessionStarted = false;
       return;
     }
+    if (user.user_metadata?.must_change_password === true) {
+      sessionStarted = false;
+      showFirstAccessPassword();
+      return;
+    }
+    isAdmin = role === 'admin';
+    $('#nav-admin').hidden = !isAdmin;
     $('#auth-gate').hidden = true;
     $('#session').hidden = false;
     $('#session-email').textContent = user.email;
@@ -730,6 +1011,17 @@
     calculateScore();
     calculateCriteria();
     try { await loadData(); } catch (error) { setStatus(friendlyError(error), 'error'); }
+    if (isAdmin) await loadUsers();
+  }
+
+  function showFirstAccessPassword() {
+    passwordMode = 'first';
+    $('#new-password-title').textContent = 'Defina sua senha';
+    $('#new-password-lead').textContent = 'Você entrou com uma senha temporária. Crie a sua para continuar.';
+    $('#login-button').disabled = false;
+    showAuthView('new-password-form');
+    setAuthFeedback('#new-password-message', '');
+    $('#new-password').focus();
   }
 
   function showAuthView(viewId) {
@@ -744,6 +1036,9 @@
 
   async function showPasswordRecovery(session) {
     recoveryMode = true;
+    passwordMode = 'recovery';
+    $('#new-password-title').textContent = 'Criar nova senha';
+    $('#new-password-lead').textContent = 'Defina uma senha forte para concluir a recuperação.';
     if (!authRules.isAllowedCompanyEmail(session?.user?.email)) {
       await db.auth.signOut();
       showAuthView('login-form');
@@ -824,8 +1119,22 @@
       }
       $('#new-password-button').disabled = true;
       try {
-        const result = await db.auth.updateUser({password});
+        const result = await db.auth.updateUser(
+          passwordMode === 'first'
+            ? {password, data: {must_change_password: false}}
+            : {password}
+        );
         if (result.error) throw result.error;
+        if (passwordMode === 'first') {
+          // A senha temporária morre aqui: a sessão segue com a senha da própria pessoa.
+          const {data: sessionData, error: sessionError} = await db.auth.getSession();
+          if (sessionError) throw sessionError;
+          $('#new-password-form').reset();
+          $('#new-password-button').disabled = false;
+          passwordMode = 'recovery';
+          await startSession({...sessionData.session, user: result.data.user});
+          return;
+        }
         await db.auth.signOut();
         recoveryMode = false;
         window.history.replaceState({}, document.title, window.location.pathname);

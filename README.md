@@ -42,7 +42,17 @@ A migração cria RLS e grants explícitos. O acesso é permitido somente a usu�
 {"role":"hunter"}
 ```
 
-Também é aceito `{"role":"admin"}`. O cockpit aceita somente e-mails `@7cantos.com`, com cadastro público e login anônimo desativados. Crie ou convide cada usuário pelo Supabase Auth e atribua o papel em `app_metadata`.
+Também é aceito `{"role":"admin"}`. O cockpit aceita somente e-mails `@7cantos.com`, com cadastro público e login anônimo desativados.
+
+O **primeiro** admin precisa ser criado à mão pelo Supabase Auth, com `{"role":"admin"}` em `app_metadata`. A partir dele, os demais usuários são criados pela aba **Administração** do cockpit, que chama a função `manage-users` e devolve uma senha temporária de uso único. Quem entra com senha temporária é obrigado a definir a própria senha antes de ver qualquer dado.
+
+Publique a função depois de aplicar a migração:
+
+```bash
+npx --yes supabase@2.109.1 functions deploy manage-users
+```
+
+A função usa a `service_role` que o Supabase já injeta no ambiente das Edge Functions; não há secret para configurar. Ela recusa qualquer chamador que não tenha `app_metadata.role = admin`.
 
 O arquivo `public/config.js` já contém a URL e a **publishable key** deste projeto e pode ser versionado: esses valores são públicos e dependem de RLS. Nunca coloque `sb_secret_...` ou a chave legada `service_role` nele.
 
@@ -169,11 +179,13 @@ public/index.html                  design system e markup do cockpit
 public/app.js                     Auth e persistência Supabase
 public/quick-entry.js             geração e interpretação local da entrada OLX
 public/radar.js                   validação da promoção de empreendimentos
+public/goals.js                   meta mensal, cascata para o dia e gráfico previsto x realizado
 public/enrichment.js              vínculo por nome e rascunhos de e-mail por perfil
 public/config.js                  configuração pública do projeto hospedado
 public/config.example.js          modelo de configuração pública
 collector/coletor_v0.py           coleta, eventos, score e criação de alvos
 supabase/functions/collect-portals função autenticada usada pelo cockpit
+supabase/functions/manage-users    criação e listagem de usuários, restrita a admin
 supabase/migrations/              esquema, RLS, índices e regras
 supabase/seed.sql                 dez oportunidades iniciais
 docs/                             especificação e base pontuada
