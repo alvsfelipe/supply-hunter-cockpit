@@ -150,6 +150,16 @@ pre b{color:#F0C99A;font-weight:400}
 .auth-card p{color:var(--mute);font-size:13px;margin-bottom:18px}
 .auth-card .error{color:var(--brick);min-height:20px;margin:10px 0 0}
 .auth-card code{font:12px "IBM Plex Mono",monospace;background:var(--rule2);padding:2px 4px}
+.auth-card label.f{font-weight:600;color:#344054;margin-top:14px}
+.auth-card input[type=email],.auth-card input[type=password]{
+  min-height:48px;padding:12px 14px;border:1px solid #C9D4E5;border-radius:12px;
+  background:linear-gradient(180deg,#FFFFFF 0%,#F8FAFE 100%);box-shadow:0 1px 2px #1118270D;
+  transition:border-color .18s,box-shadow .18s,background .18s}
+.auth-card input[type=email]::placeholder,.auth-card input[type=password]::placeholder{color:#98A2B3}
+.auth-card input[type=email]:hover,.auth-card input[type=password]:hover{border-color:#9EC2FF;background:#fff}
+.auth-card input[type=email]:focus,.auth-card input[type=password]:focus{
+  outline:0;border-color:var(--brand-strong);background:#fff;box-shadow:0 0 0 4px #4D8EF026,0 2px 6px #11182712}
+.auth-card .btn{min-height:48px;border-radius:12px;box-shadow:0 5px 14px #4D8EF02E}
 .auth-view[hidden]{display:none}
 .auth-link{display:block;width:100%;margin-top:12px;color:#245AA8;font-size:13px;text-align:center;text-decoration:underline;text-underline-offset:3px}
 .auth-feedback{min-height:20px;margin:10px 0 0!important;font-size:12.5px!important;color:#24734F!important}
