@@ -74,6 +74,8 @@ que você tenha exportado manualmente. Rode:
 python collector/coletor_v0.py --mostrar-url --bairro moema --preco-min 3000 --preco-max 6000
 python collector/coletor_v0.py --portal meu_imovel --bairro moema --max-itens 3 --dry-run
 python collector/coletor_v0.py --portal meu_imovel --max-itens 30
+python collector/coletor_v0.py --portal ghar --bairro moema --max-itens 3 --dry-run
+python collector/coletor_v0.py --portal ghar --max-itens 30
 python collector/coletor_v0.py --so-relatorio
 ```
 
@@ -93,6 +95,22 @@ imediatamente em HTTP 403/429 e não usa técnicas de contorno. Rode primeiro co
 `--dry-run`; sem essa opção, incorporadoras e empreendimentos são gravados no
 Supabase. A fonte não exibe total de unidades ou pavimentos nas fichas verificadas,
 portanto esses valores permanecem `null` até confirmação primária.
+
+### Ghar: confirmação técnica
+
+O adaptador do Ghar lê a página pública de imóveis prontos e as fichas dos polos
+Z1/Z2. Além de incorporadora e tipologia, ele grava quantidade de residências e
+andares somente quando esses números aparecem explicitamente no texto da ficha.
+O URL da fonte acompanha a contagem. Fichas sem endereço são ignoradas, sem
+preenchimento artificial.
+
+### Coleta pela interface
+
+Depois de entrar no cockpit como `hunter` ou `admin`, abra **Scripts**. Os botões
+de Meu Imóvel e Ghar invocam a Edge Function autenticada `collect-portals` e
+coletam de uma a três fichas por rodada no bairro escolhido. A função usa `@supabase/server`, valida a
+sessão e grava com o cliente sujeito às políticas RLS do usuário. Para outros
+bairros ou lotes maiores, use os comandos Python locais.
 
 ### OLX: limite operacional atual
 
@@ -125,6 +143,7 @@ public/quick-entry.js             geração e interpretação local da entrada O
 public/config.js                  configuração pública do projeto hospedado
 public/config.example.js          modelo de configuração pública
 collector/coletor_v0.py           coleta, eventos, score e criação de alvos
+supabase/functions/collect-portals função autenticada usada pelo cockpit
 supabase/migrations/              esquema, RLS, índices e regras
 supabase/seed.sql                 dez oportunidades iniciais
 docs/                             especificação e base pontuada

@@ -90,5 +90,49 @@ class MeuImovelParserTest(unittest.TestCase):
             coletor.requisicao_publica("https://appmeuimovel.com/api/imoveis")
 
 
+class GharParserTest(unittest.TestCase):
+    def test_filtra_links_de_fichas_nos_polos(self):
+        html = """
+        <a href="https://ghar.com.br/imoveis/sp/sao-paulo/moema/villa-residence/">Villa</a>
+        <a href="https://ghar.com.br/imoveis/sp/sao-paulo/moema/villa-residence/">Repetido</a>
+        <a href="https://ghar.com.br/imoveis/sp/sao-paulo/butanta/outro/">Fora</a>
+        <a href="https://ghar.com.br/imoveis/prontos/">Índice</a>
+        """
+        itens = coletor.extrair_links_ghar(html, bairro="moema")
+        self.assertEqual(len(itens), 1)
+        self.assertEqual(itens[0]["external_id"], "villa-residence")
+        self.assertEqual(itens[0]["polo"], "Z1")
+
+    def test_extrai_unidades_e_andares_confirmados(self):
+        item = {
+            "portal": "ghar",
+            "url": "https://ghar.com.br/imoveis/sp/sao-paulo/moema/villa/",
+            "external_id": "villa",
+            "bairro": "moema",
+            "polo": "Z1",
+        }
+        html = """
+        <body class="construtoras-incorporadoras-lavvi-incorporadora-construtora">
+        <h1 class="elementor-heading-title">Villa Residence</h1>
+        <span class="elementor-icon-list-text">Entrega: 09/2025</span>
+        <span class="elementor-icon-list-text">149 a 418 m²</span>
+        <span class="elementor-icon-list-text">Quartos 2 e 3</span>
+        <span class="elementor-icon-list-text">Suítes 2 e 3</span>
+        <span class="elementor-icon-list-text">Vagas 2 a 4</span>
+        <p>Projeto da <strong>Lavvi</strong>, incorporadora reconhecida.</p>
+        <p>Localizado na Av. Agami, 364, em Moema.</p>
+        <p>1 torre com térreo + 26 andares, totalizando 100 unidades residenciais.</p>
+        </body>
+        """
+        detalhe = coletor.extrair_detalhe_ghar(html, item)
+        self.assertEqual(detalhe["nome"], "Villa Residence")
+        self.assertEqual(detalhe["endereco"], "Av. Agami, 364")
+        self.assertEqual(detalhe["bedrooms_min"], 2)
+        self.assertEqual(detalhe["area_max"], 418)
+        self.assertEqual(detalhe["total_units"], 100)
+        self.assertEqual(detalhe["total_floors"], 26)
+        self.assertEqual(detalhe["incorporadora"], "Lavvi")
+
+
 if __name__ == "__main__":
     unittest.main()

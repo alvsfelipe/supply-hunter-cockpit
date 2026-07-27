@@ -207,10 +207,10 @@ O funil é contado em **unidades representadas**, não em número de negócios. 
 |---|---|---|
 | **OLX** | Anunciante, contagem de anúncios ativos por anunciante, dias no ar, variação de preço, bairro, área, tipologia | Não extrair contato. Delay generoso. |
 | **VivaReal / ZAP** | Empreendimentos com status "pronto para morar" por bairro, incorporadora, faixa de metragem, endereço | Mesma stack do Grupo OLX. Intervalo largo entre requisições. |
-| **Ghar** | Diretório de construtoras e incorporadoras; empreendimentos por status | Curadoria de corretora — serve para descobrir nome, não para contar estoque |
+| **Ghar** | Empreendimentos prontos, incorporadora, endereço, tipologia, unidades residenciais e andares quando explícitos na ficha | Não preencher contagem ausente; guardar a URL que sustenta o número |
 | **Meu Imóvel (`appmeuimovel.com`)** | Empreendimento, estágio/data de entrega, incorporadora, endereço, faixa de área, quartos, suítes e vagas | A ficha pública validada em 26/07/2026 não informa total de unidades ou pavimentos; mantenha `null` até fonte primária |
 
-Os seletores CSS de todos os portais são **placeholders** no `coletor_v0.py`. Precisam ser validados contra o HTML real. Nenhum seletor sobrevive a um redesign — validar faz parte do trabalho, não é dívida.
+Meu Imóvel e Ghar têm adaptadores validados em 27/07/2026 no coletor Python e na Edge Function autenticada `collect-portals`. Nenhum seletor sobrevive a um redesign — validar faz parte do trabalho, não é dívida.
 
 Sempre respeitar `robots.txt` e termos de uso. Para volume sério, migrar para API oficial ou provedor de dados.
 
@@ -218,14 +218,13 @@ Sempre respeitar `robots.txt` e termos de uso. Para volume sério, migrar para A
 
 ## Estado atual e próximo trabalho
 
-**Pronto:** repositório Git isolado; cockpit com cinco abas, login e persistência Supabase; formulário de contato; migração com RLS; coletor Python integrado ao Supabase; dez alvos no seed; base de 95 prédios pontuada; 27 organizações mapeadas na documentação de origem.
+**Pronto:** repositório Git isolado; cockpit com login e persistência Supabase; entrada rápida OLX; adaptadores Meu Imóvel e Ghar executáveis pela interface autenticada; formulário de contato; migração com RLS; coletor Python integrado ao Supabase; dez alvos no seed; base de 95 prédios pontuada; 27 organizações mapeadas na documentação de origem.
 
 **Aberto, em ordem:**
 
-1. Adaptador Meu Imóvel — radar `?estagio=pronto`, priorizando Z1/Z2 e mantendo contagem de unidades como desconhecida
-2. Radar de entregas via VivaReal com filtro "pronto para morar" nos bairros de Z1 e Z2
-3. Exibir histórico de interações por oportunidade no cockpit
-4. Importar a base pontuada de edifícios para `buildings`
+1. Radar de entregas via VivaReal com filtro "pronto para morar" nos bairros de Z1 e Z2
+2. Exibir histórico de interações por oportunidade no cockpit
+3. Importar a base pontuada de edifícios para `buildings`
 
 **Anti-metas — não construa:**
 

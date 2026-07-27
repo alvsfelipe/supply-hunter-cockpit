@@ -13,8 +13,8 @@
   const SCRIPTS = [
     {id:'olx', t:'OLX', alvo:'Revelar quem tem carteira', extrai:'Identidade do anunciante, quantidade de anúncios ativos por anunciante, dias no ar, variação de preço, bairro, área e tipologia.', nao:'Fluxo manual assistido: não faz scraping nem extrai telefone. Gere a busca, use a aba Entrada rápida e revise antes de salvar.', cmd:'python collector/coletor_v0.py --mostrar-url --bairro moema --preco-min 3000 --preco-max 6000', ret:'URL pronta para abrir e registrar manualmente os anunciantes recorrentes.'},
     {id:'vr', t:'VivaReal e ZAP', alvo:'Radar de entregas e vacância de estreia', extrai:'Adaptador ainda não configurado.', nao:'Nenhuma coleta é executada até validar fonte, termos e campos públicos.', cmd:'Ainda não configurado — próximo portal', ret:'Sem dados nesta versão.'},
-    {id:'ghar', t:'Ghar', alvo:'Mapear o universo de incorporadoras', extrai:'Adaptador ainda não configurado.', nao:'Não trate curadoria de corretora como contagem de estoque.', cmd:'Ainda não configurado — próximo portal', ret:'Sem dados nesta versão.'},
-    {id:'amv', t:'Meu Imóvel', alvo:'Radar de empreendimentos novos e prontos', extrai:'Nome, estágio/data de entrega, endereço, bairro, área, quartos, suítes, vagas e incorporadora responsável.', nao:'Lê apenas páginas públicas com pausa fixa de 6 s; não acessa /api/. Total de unidades e pavimentos continuam null.', cmd:'python collector/coletor_v0.py --portal meu_imovel --bairro moema --max-itens 3 --dry-run', ret:'Empreendimentos em Z1/Z2 para cruzar com incorporadora e validar tamanho do alvo.'}
+    {id:'ghar', t:'Ghar', alvo:'Confirmar tamanho e incorporadora dos empreendimentos', extrai:'Nome, endereço, entrega, área, quartos, suítes, vagas, incorporadora, unidades residenciais e andares quando publicados.', nao:'Não completa campos ausentes nem acessa áreas administrativas. Fichas sem endereço são ignoradas.', cmd:'python collector/coletor_v0.py --portal ghar --bairro moema --max-itens 3 --dry-run', ret:'Empreendimentos prontos com contagem confirmada na ficha pública.', collect:true},
+    {id:'meu_imovel', t:'Meu Imóvel', alvo:'Radar de empreendimentos novos e prontos', extrai:'Nome, estágio/data de entrega, endereço, bairro, área, quartos, suítes, vagas e incorporadora responsável.', nao:'Lê apenas páginas públicas com pausa fixa de 6 s; não acessa /api/. Total de unidades e pavimentos continuam null.', cmd:'python collector/coletor_v0.py --portal meu_imovel --bairro moema --max-itens 3 --dry-run', ret:'Empreendimentos em Z1/Z2 para cruzar com incorporadora e validar tamanho do alvo.', collect:true}
   ];
 
   const $ = selector => document.querySelector(selector);
@@ -129,12 +129,48 @@
   }
 
   function renderScripts() {
+    const neighborhoodOptions = Object.keys(window.SupplyHunterQuickEntry?.neighborhoods || {})
+      .map(neighborhood => `<option value="${neighborhood}"${neighborhood === 'moema' ? ' selected' : ''}>${neighborhoodLabel(neighborhood)}</option>`)
+      .join('');
     $('#scripts').innerHTML = SCRIPTS.map(script => `
       <div class="panel"><h3>${script.t}</h3><div class="sub">${script.alvo}</div>
       <table><tbody><tr><td style="width:130px;color:var(--mute)">Extrai</td><td>${script.extrai}</td></tr><tr><td style="color:var(--mute)">Limite</td><td>${script.nao}</td></tr><tr><td style="color:var(--mute)">Devolve</td><td>${script.ret}</td></tr></tbody></table>
       <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px"><span class="tallyn">Comando</span><button class="copy" data-cp="${script.id}">Copiar</button></div>
       <pre id="cmd-${script.id}">${escapeHtml(script.cmd)}</pre>
-      <div style="display:flex;gap:10px;align-items:center;margin-top:12px"><button class="btn ghost" data-run="${script.id}">Registrar execução</button><span class="tallyn" id="run-${script.id}">${runs[script.id] ? `Última execução: ${runs[script.id]}` : 'Nunca executado'}</span></div></div>`).join('');
+      <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+        ${script.collect ? `
+          <select aria-label="Bairro" data-collect-neighborhood="${script.id}" style="width:auto">${neighborhoodOptions}</select>
+          <input aria-label="Quantidade de fichas" data-collect-count="${script.id}" type="number" min="1" max="3" value="1" style="width:72px">
+          <button class="btn" data-collect="${script.id}">Coletar</button>
+        ` : ''}
+        <span class="tallyn" id="run-${script.id}">${runs[script.id] ? `Última execução: ${runs[script.id]}` : 'Nunca executado'}</span>
+      </div></div>`).join('');
+  }
+
+  async function collectPortal(button) {
+    const portal = button.dataset.collect;
+    const bairro = document.querySelector(`[data-collect-neighborhood="${portal}"]`).value;
+    const maxItems = Number(document.querySelector(`[data-collect-count="${portal}"]`).value) || 1;
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = 'Coletando…';
+    setStatus(`Coletando ${portal} · aguarde`);
+    try {
+      const {data, error} = await db.functions.invoke('collect-portals', {
+        body: {portal, bairro, max_items: maxItems}
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const count = data?.collected || 0;
+      toast(count ? `${count} empreendimento gravado no Supabase.` : 'Nenhuma ficha completa encontrada.');
+      await loadData();
+    } catch (error) {
+      setStatus('Falha na coleta', 'error');
+      toast(friendlyError(error));
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
   }
 
   function renderAll() {
@@ -412,14 +448,7 @@
         const script = SCRIPTS.find(item => item.id === data.cp);
         navigator.clipboard?.writeText(script.cmd).then(() => toast('Comando copiado.'), () => toast('Copie manualmente o comando.'));
       }
-      if (data.run) {
-        const now = new Date().toISOString();
-        const result = await db.from('agent_runs').insert({script: data.run, started_at: now, finished_at: now, status: 'completed'});
-        if (result.error) return toast(friendlyError(result.error));
-        runs[data.run] = new Date(now).toLocaleString('pt-BR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
-        renderScripts();
-        toast('Execução registrada.');
-      }
+      if (data.collect) await collectPortal(event.target);
     });
 
     $('#add').addEventListener('click', async () => {

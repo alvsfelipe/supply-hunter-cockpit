@@ -65,6 +65,10 @@ PORTAIS = {
         "url": "https://appmeuimovel.com/apartamentos?estagio=pronto",
         "tipo": "empreendimentos",
     },
+    "ghar": {
+        "url": "https://ghar.com.br/imoveis/prontos/",
+        "tipo": "empreendimentos",
+    },
 }
 
 HEADERS = {"User-Agent": "7Cantos-SupplyHunter/0.2"}
@@ -316,6 +320,124 @@ def coletar_meu_imovel(bairro=None, max_itens=30):
         )
     return achados
 
+def extrair_links_ghar(html, bairro=None):
+    """Extrai fichas de empreendimento da página pública de imóveis prontos."""
+    links, vistos = [], set()
+    bairro_filtro = norm_texto(bairro).replace(" ", "-") if bairro else None
+    soup = BeautifulSoup(html, "html.parser")
+    for ancora in soup.select("a[href]"):
+        url = ancora.get("href", "").split("#", 1)[0]
+        partes = [p for p in urlparse(url).path.split("/") if p]
+        if len(partes) != 5 or partes[:3] != ["imoveis", "sp", "sao-paulo"]:
+            continue
+        bairro_url, external_id = partes[3], partes[4]
+        polo = polo_do_bairro(bairro_url)
+        if not polo or (bairro_filtro and bairro_url != bairro_filtro):
+            continue
+        url = f"https://ghar.com.br/{'/'.join(partes)}/"
+        if url in vistos:
+            continue
+        vistos.add(url)
+        links.append({
+            "portal": "ghar", "url": url, "external_id": external_id,
+            "bairro": bairro_url, "polo": polo,
+        })
+    return links
+
+def extrair_detalhe_ghar(html, item):
+    """Extrai os campos técnicos explícitos na ficha pública do Ghar."""
+    soup = BeautifulSoup(html, "html.parser")
+    detalhe = dict(item)
+    detalhe["nome"] = _ultimo_texto(
+        soup, "h1.elementor-heading-title"
+    ) or _ultimo_texto(soup, "h1")
+
+    icones = [
+        el.get_text(" ", strip=True)
+        for el in soup.select(
+            ".elementor-icon-list-text, .jet-listing-dynamic-field__content"
+        )
+    ]
+    def valor_icone(prefixo):
+        return next(
+            (texto for texto in icones if norm_texto(texto).startswith(prefixo)),
+            None,
+        )
+
+    for rotulo, prefixo in (("quartos", "bedrooms"), ("suites", "suites"),
+                            ("vagas", "parking")):
+        minimo, maximo = faixa_numerica(valor_icone(rotulo))
+        detalhe[f"{prefixo}_min"] = int(minimo) if minimo is not None else None
+        detalhe[f"{prefixo}_max"] = int(maximo) if maximo is not None else None
+    areas = next((texto for texto in icones if "m²" in texto), None)
+    detalhe["area_min"], detalhe["area_max"] = faixa_numerica(areas)
+
+    entrega = valor_icone("entrega:")
+    detalhe["delivery_date_text"] = (
+        entrega.split(":", 1)[1].strip() if entrega and ":" in entrega else None
+    )
+    detalhe["delivery_status"] = "pronto"
+
+    texto = soup.get_text(" ", strip=True)
+    endereco = re.search(
+        r"\b((?:Avenida|Av\.?|Rua|Alameda|Al\.?)\s+[^,.]{2,80},\s*\d+[A-Za-z]?)",
+        texto, re.I,
+    )
+    detalhe["endereco"] = endereco.group(1).strip() if endereco else None
+
+    unidades = re.search(
+        r"\b(?:totalizando|com|contempla)\s+(\d+)\s+"
+        r"(?:unidades residenciais|residencias)\b",
+        norm_texto(texto),
+    )
+    detalhe["total_units"] = int(unidades.group(1)) if unidades else None
+    andares = re.search(r"\b(\d+)\s+andares\b", norm_texto(texto))
+    detalhe["total_floors"] = int(andares.group(1)) if andares else None
+
+    incorporadora = re.search(
+        r"(?:pela|da)\s*<strong>([^<]{2,80})</strong>"
+        r"(?=.{0,100}(?:incorporadora|construtora))",
+        html, re.I | re.S,
+    )
+    detalhe["incorporadora"] = (
+        BeautifulSoup(incorporadora.group(1), "html.parser").get_text(" ", strip=True)
+        if incorporadora else None
+    )
+    if not detalhe["incorporadora"]:
+        classe = re.search(
+            r"construtoras-incorporadoras-([a-z0-9-]+)", html, re.I
+        )
+        if classe:
+            detalhe["incorporadora"] = classe.group(1).replace("-", " ").title()
+    return detalhe
+
+def coletar_ghar(bairro=None, max_itens=30):
+    html_lista = requisicao_publica(PORTAIS["ghar"]["url"])
+    links = extrair_links_ghar(html_lista, bairro=bairro)
+    achados = []
+    for indice, item in enumerate(links, 1):
+        if len(achados) >= max_itens:
+            break
+        time.sleep(DELAY)
+        try:
+            detalhe = extrair_detalhe_ghar(
+                requisicao_publica(item["url"]), item
+            )
+        except (requests.RequestException, RuntimeError) as erro:
+            print(f"  ! Ghar {indice}/{len(links)}: {erro}")
+            break
+        if not detalhe.get("endereco"):
+            print(f"  ! Ghar {indice}/{len(links)}: ficha sem endereço; ignorada")
+            continue
+        achados.append(detalhe)
+        unidades = detalhe.get("total_units")
+        print(
+            f"  Ghar {indice}/{len(links)}: {detalhe.get('nome')} "
+            f"[{detalhe['bairro']}] · "
+            f"{unidades if unidades is not None else '?'} unidades"
+        )
+    return achados
+
 def extrair(card, seletores):
     out = {}
     for campo, (sel, attr) in seletores.items():
@@ -469,6 +591,8 @@ def gravar_empreendimentos(con: Client, itens):
     agora = datetime.now(timezone.utc).isoformat()
     criados, atualizados = 0, 0
     for item in itens:
+        fonte = item["portal"]
+        fonte_nome = "Meu Imóvel" if fonte == "meu_imovel" else "Ghar"
         incorporadora_id = None
         nome_incorporadora = item.get("incorporadora")
         if nome_incorporadora:
@@ -483,7 +607,7 @@ def gravar_empreendimentos(con: Client, itens):
                     "name": nome_incorporadora,
                     "type": "incorporadora",
                     "polo": item["polo"],
-                    "source": "Meu Imóvel",
+                    "source": fonte_nome,
                 }).execute().data[0]
                 incorporadora_id = organizacao["id"]
 
@@ -492,7 +616,7 @@ def gravar_empreendimentos(con: Client, itens):
             "address": item["endereco"],
             "neighborhood": item["bairro"],
             "polo": item["polo"],
-            "source": "meu_imovel",
+            "source": fonte,
             "source_external_id": item["external_id"],
             "source_url": item["url"],
             "developer_organization_id": incorporadora_id,
@@ -508,9 +632,14 @@ def gravar_empreendimentos(con: Client, itens):
             "parking_max": item.get("parking_max"),
             "last_seen_at": agora,
         }
+        if item.get("total_units") is not None:
+            payload["total_units_estimated"] = item["total_units"]
+            payload["total_units_source_url"] = item["url"]
+        if item.get("total_floors") is not None:
+            payload["total_floors"] = item["total_floors"]
         existentes = (
             con.table("buildings").select("id")
-            .eq("source", "meu_imovel")
+            .eq("source", fonte)
             .eq("source_external_id", item["external_id"])
             .limit(1).execute().data
         )
@@ -747,7 +876,11 @@ def main():
     max_itens = a.max_itens if a.max_itens is not None else (3 if a.dry_run else 30)
     if max_itens < 1:
         ap.error("--max-itens deve ser maior que zero")
-    todos = coletar_meu_imovel(a.bairro, max_itens)
+    coletores = {
+        "meu_imovel": coletar_meu_imovel,
+        "ghar": coletar_ghar,
+    }
+    todos = coletores[a.portal](a.bairro, max_itens)
 
     print(f"\ncoletados: {len(todos)}")
     if a.dry_run:
@@ -763,10 +896,17 @@ def main():
     try:
         novos, atualizados = gravar_empreendimentos(con, todos)
         print(f"empreendimentos novos: {novos} · atualizados: {atualizados}")
-        print(
-            "AÇÃO: confirmar total de unidades com a incorporadora ou fonte "
-            "primária antes de criar oportunidade."
-        )
+        if a.portal == "ghar":
+            confirmados = sum(item.get("total_units") is not None for item in todos)
+            print(
+                f"AÇÃO: {confirmados} ficha(s) com contagem pública de unidades; "
+                "abrir a fonte vinculada antes da abordagem."
+            )
+        else:
+            print(
+                "AÇÃO: confirmar total de unidades com a incorporadora ou fonte "
+                "primária antes de criar oportunidade."
+            )
         con.table("agent_runs").update({
             "finished_at": datetime.now(timezone.utc).isoformat(),
             "rows_in": len(todos),
