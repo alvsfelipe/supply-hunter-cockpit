@@ -33,6 +33,8 @@ nav{background:var(--nav);color:#E8EEF8;padding:20px 0;position:sticky;top:0;hei
 .brand span{display:block;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#94A3B8;margin-top:8px}
 nav button{display:flex;justify-content:space-between;align-items:center;width:100%;
   padding:9px 18px;color:#B8C3D6;font-size:14px;text-align:left;border-left:3px solid transparent}
+/* display de autor vence o [hidden] do navegador: sem esta regra o botão continua visível */
+nav button[hidden]{display:none}
 nav button:hover{color:#fff;background:var(--nav-hover)}
 nav button[aria-current="true"]{color:#fff;border-left-color:var(--brick);background:var(--nav-hover);font-weight:600}
 nav .n{font-family:"IBM Plex Mono";font-size:11px;color:#7F8DA3}

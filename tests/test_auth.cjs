@@ -36,6 +36,10 @@ assert.match(app, /\{password\}\s*\n?\s*\);/);
 assert.match(app, /must_change_password === true/);
 assert.match(app, /must_change_password: false/);
 assert.match(app, /showFirstAccessPassword/);
+// O display de autor de `nav button` vence o [hidden] do user-agent: sem esta regra
+// explícita a aba Administração aparece para hunter.
+assert.match(html, /nav button\[hidden\]\{display:none\}/);
+assert.match(app, /dataset\.t === 'admin' && !isAdmin/);
 assert.match(config, /enable_signup = false/);
 assert.match(config, /\[functions\.manage-users\]\nverify_jwt = true/);
 assert.match(config, /minimum_password_length = 12/);

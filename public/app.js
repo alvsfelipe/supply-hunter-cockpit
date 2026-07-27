@@ -818,6 +818,8 @@
   function bindEvents() {
     document.querySelectorAll('nav button[data-t]').forEach(button => {
       button.addEventListener('click', () => {
+        // O CSS esconde o botão; isto impede a aba mesmo se alguém revelá-lo pelo devtools.
+        if (button.dataset.t === 'admin' && !isAdmin) return;
         document.querySelectorAll('nav button[data-t]').forEach(item => item.setAttribute('aria-current', item === button));
         document.querySelectorAll('section').forEach(section => section.classList.toggle('on', section.id === `t-${button.dataset.t}`));
         if (window.matchMedia('(max-width: 860px)').matches) button.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'center'});
