@@ -31,6 +31,10 @@
   const clayDrafts = new Map();
 
   const config = window.SUPABASE_CONFIG || {};
+  const authRules = window.SupplyHunterAuth;
+  let recoveryMode = window.location.hash.includes('type=recovery')
+    || new URLSearchParams(window.location.search).get('type') === 'recovery'
+    || new URLSearchParams(window.location.search).has('code');
   const configured = /^https:\/\/.+\.supabase\.co$/.test(config.url || '')
     && /^(sb_publishable_|eyJ)/.test(config.publishableKey || '')
     && !config.url.includes('SEU-PROJETO')
@@ -65,6 +69,8 @@
   function friendlyError(error) {
     if (!error) return 'Erro inesperado.';
     if (error.code === '42501') return 'Seu usuário não tem o papel hunter/admin ou a tabela não foi liberada na Data API.';
+    if (error.code === 'invalid_credentials') return 'E-mail ou senha inválidos.';
+    if (error.code === 'weak_password') return 'Sua senha não atende à política atual. Use “Esqueci minha senha” para criar uma senha forte.';
     return error.message || String(error);
   }
 
@@ -701,10 +707,18 @@
     if (sessionStarted) return;
     sessionStarted = true;
     user = session.user;
+    if (!authRules.isAllowedCompanyEmail(user.email)) {
+      $('#login-error').textContent = 'Acesso permitido somente para contas @7cantos.com.';
+      await db.auth.signOut();
+      $('#login-button').disabled = false;
+      sessionStarted = false;
+      return;
+    }
     const role = user.app_metadata?.role;
     if (!['hunter', 'admin'].includes(role)) {
       $('#login-error').textContent = 'Usuário autenticado, mas sem app_metadata.role hunter/admin.';
       await db.auth.signOut();
+      $('#login-button').disabled = false;
       sessionStarted = false;
       return;
     }
@@ -718,24 +732,53 @@
     try { await loadData(); } catch (error) { setStatus(friendlyError(error), 'error'); }
   }
 
-  async function boot() {
-    if (!configured || !window.supabase) {
-      $('#login-form').innerHTML = '<h1>Configure o Supabase</h1><p>Copie <code>config.example.js</code> para <code>config.js</code> e informe a URL e a publishable key do projeto. O arquivo real é ignorado pelo Git.</p>';
-      setStatus('Supabase ainda não configurado', 'error');
+  function showAuthView(viewId) {
+    for (const form of document.querySelectorAll('.auth-view')) form.hidden = form.id !== viewId;
+  }
+
+  function setAuthFeedback(selector, message, state = 'ok') {
+    const element = $(selector);
+    element.textContent = message;
+    element.dataset.state = state;
+  }
+
+  async function showPasswordRecovery(session) {
+    recoveryMode = true;
+    if (!authRules.isAllowedCompanyEmail(session?.user?.email)) {
+      await db.auth.signOut();
+      showAuthView('login-form');
+      $('#login-error').textContent = 'O link não pertence a uma conta @7cantos.com.';
       return;
     }
-    db = window.supabase.createClient(config.url, config.publishableKey);
-    db.auth.onAuthStateChange((_event, session) => {
-      if (session) startSession(session).catch(error => setStatus(friendlyError(error), 'error'));
+    showAuthView('new-password-form');
+    setAuthFeedback('#new-password-message', 'Link validado. Crie sua nova senha.');
+  }
+
+  function bindAuthEvents() {
+    $('#show-recovery').addEventListener('click', () => {
+      $('#recovery-email').value = $('#login-email').value.trim();
+      setAuthFeedback('#recovery-message', '');
+      showAuthView('recovery-form');
+      $('#recovery-email').focus();
     });
-    const {data, error} = await db.auth.getSession();
-    if (error) $('#login-error').textContent = friendlyError(error);
-    if (data.session) await startSession(data.session);
+
+    $('#back-to-login').addEventListener('click', () => {
+      $('#login-email').value = $('#recovery-email').value.trim();
+      showAuthView('login-form');
+      $('#login-email').focus();
+    });
+
     $('#login-form').addEventListener('submit', async event => {
       event.preventDefault();
-      $('#login-button').disabled = true;
+      const email = authRules.normalizeEmail($('#login-email').value);
       $('#login-error').textContent = '';
-      const result = await db.auth.signInWithPassword({email: $('#login-email').value.trim(), password: $('#login-password').value});
+      setAuthFeedback('#login-message', '');
+      if (!authRules.isAllowedCompanyEmail(email)) {
+        $('#login-error').textContent = 'Use seu e-mail corporativo @7cantos.com.';
+        return;
+      }
+      $('#login-button').disabled = true;
+      const result = await db.auth.signInWithPassword({email, password: $('#login-password').value});
       if (result.error) {
         $('#login-error').textContent = friendlyError(result.error);
         $('#login-button').disabled = false;
@@ -743,30 +786,81 @@
       }
       await startSession(result.data.session);
     });
-    $('#magic-link-button').addEventListener('click', async () => {
-      const email = $('#login-email').value.trim();
-      if (!email) {
-        $('#login-error').textContent = 'Informe seu e-mail para receber o link de acesso.';
+
+    $('#recovery-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const email = authRules.normalizeEmail($('#recovery-email').value);
+      setAuthFeedback('#recovery-message', '');
+      if (!authRules.isAllowedCompanyEmail(email)) {
+        setAuthFeedback('#recovery-message', 'Use seu e-mail corporativo @7cantos.com.', 'error');
         return;
       }
-      $('#magic-link-button').disabled = true;
-      $('#login-error').textContent = '';
+      $('#recovery-button').disabled = true;
       try {
-        const result = await db.auth.signInWithOtp({
-          email,
-          options: {
-            shouldCreateUser: false,
-            emailRedirectTo: `${window.location.origin}${window.location.pathname}`
-          }
+        const result = await db.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}${window.location.pathname}`
         });
         if (result.error) throw result.error;
-        $('#login-error').textContent = 'Link enviado. Abra o e-mail para entrar.';
+        setAuthFeedback('#recovery-message', 'Se a conta estiver cadastrada, o link de recuperação chegará por e-mail.');
       } catch (error) {
-        $('#login-error').textContent = friendlyError(error);
+        setAuthFeedback('#recovery-message', friendlyError(error), 'error');
       } finally {
-        $('#magic-link-button').disabled = false;
+        $('#recovery-button').disabled = false;
       }
     });
+
+    $('#new-password-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const password = $('#new-password').value;
+      const confirmation = $('#confirm-password').value;
+      setAuthFeedback('#new-password-message', '');
+      if (!authRules.isStrongPassword(password)) {
+        setAuthFeedback('#new-password-message', authRules.passwordIssueMessage(password), 'error');
+        return;
+      }
+      if (password !== confirmation) {
+        setAuthFeedback('#new-password-message', 'As senhas não coincidem.', 'error');
+        return;
+      }
+      $('#new-password-button').disabled = true;
+      try {
+        const result = await db.auth.updateUser({password});
+        if (result.error) throw result.error;
+        await db.auth.signOut();
+        recoveryMode = false;
+        window.history.replaceState({}, document.title, window.location.pathname);
+        $('#new-password-form').reset();
+        showAuthView('login-form');
+        setAuthFeedback('#login-message', 'Senha atualizada. Entre novamente com a nova senha.');
+      } catch (error) {
+        setAuthFeedback('#new-password-message', friendlyError(error), 'error');
+      } finally {
+        $('#new-password-button').disabled = false;
+      }
+    });
+  }
+
+  async function boot() {
+    if (!configured || !window.supabase || !authRules) {
+      $('#login-form').innerHTML = '<h1>Configure o Supabase</h1><p>Copie <code>config.example.js</code> para <code>config.js</code> e informe a URL e a publishable key do projeto. O arquivo real é ignorado pelo Git.</p>';
+      setStatus('Supabase ainda não configurado', 'error');
+      return;
+    }
+    bindAuthEvents();
+    db = window.supabase.createClient(config.url, config.publishableKey);
+    db.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) {
+        window.setTimeout(() => showPasswordRecovery(session).catch(error => setAuthFeedback('#new-password-message', friendlyError(error), 'error')), 0);
+        return;
+      }
+      if (session && !recoveryMode) {
+        window.setTimeout(() => startSession(session).catch(error => setStatus(friendlyError(error), 'error')), 0);
+      }
+    });
+    const {data, error} = await db.auth.getSession();
+    if (error) $('#login-error').textContent = friendlyError(error);
+    if (data.session && recoveryMode) await showPasswordRecovery(data.session);
+    else if (data.session) await startSession(data.session);
   }
 
   boot().catch(error => setStatus(friendlyError(error), 'error'));

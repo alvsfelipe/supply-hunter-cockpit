@@ -42,7 +42,7 @@ A migração cria RLS e grants explícitos. O acesso é permitido somente a usu�
 {"role":"hunter"}
 ```
 
-Também é aceito `{"role":"admin"}`. Convide os usuários pelo Supabase Auth e mantenha cadastro público e login anônimo desativados.
+Também é aceito `{"role":"admin"}`. O cockpit aceita somente e-mails `@7cantos.com`, com cadastro público e login anônimo desativados. Crie ou convide cada usuário pelo Supabase Auth e atribua o papel em `app_metadata`.
 
 O arquivo `public/config.js` já contém a URL e a **publishable key** deste projeto e pode ser versionado: esses valores são públicos e dependem de RLS. Nunca coloque `sb_secret_...` ou a chave legada `service_role` nele.
 
@@ -55,7 +55,7 @@ python3 -m http.server 8000 --directory public
 
 Sirva somente `public/`. A raiz contém `.env` com a secret key do coletor e nunca deve ser exposta por um servidor HTTP.
 
-A aplicação exige login. O formulário de contato grava a interação, unidades confirmadas, critérios de qualificação e próximo passo no Supabase. Nenhuma mensagem é enviada automaticamente.
+A aplicação exige e-mail corporativo e senha. A tela **Esqueci minha senha** envia o link do Supabase e exige uma nova senha com ao menos 12 caracteres, maiúscula, minúscula, número e símbolo. O formulário de contato grava a interação, unidades confirmadas, critérios de qualificação e próximo passo no Supabase. Nenhuma mensagem é enviada automaticamente.
 
 ## 3. Rodar o coletor Python
 

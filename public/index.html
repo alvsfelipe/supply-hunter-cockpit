@@ -150,6 +150,11 @@ pre b{color:#F0C99A;font-weight:400}
 .auth-card p{color:var(--mute);font-size:13px;margin-bottom:18px}
 .auth-card .error{color:var(--brick);min-height:20px;margin:10px 0 0}
 .auth-card code{font:12px "IBM Plex Mono",monospace;background:var(--rule2);padding:2px 4px}
+.auth-view[hidden]{display:none}
+.auth-link{display:block;width:100%;margin-top:12px;color:#245AA8;font-size:13px;text-align:center;text-decoration:underline;text-underline-offset:3px}
+.auth-feedback{min-height:20px;margin:10px 0 0!important;font-size:12.5px!important;color:#24734F!important}
+.auth-feedback[data-state="error"]{color:var(--brick)!important}
+.password-rules{margin:8px 0 0!important;font:11px/1.5 "IBM Plex Mono",monospace!important;color:var(--mute)!important}
 .statusline{font:11px "IBM Plex Mono",monospace;color:var(--mute);padding:7px 30px;border-bottom:1px solid var(--rule2);background:var(--card)}
 .statusline[data-state="error"]{color:var(--brick);background:var(--brick-l)}
 .modal{border:0;background:transparent;padding:0;margin:auto;width:min(620px,calc(100% - 30px))}
@@ -602,19 +607,43 @@ button:disabled{cursor:not-allowed;opacity:.55}
 <div class="toast" id="toast"></div>
 
 <div class="auth-gate" id="auth-gate">
-  <form class="auth-card" id="login-form">
+  <div class="auth-card">
     <div class="brand"><img class="brand-logo" src="data:image/png;base64,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" alt="7Cantos"><span>Supply Hunter · São Paulo</span></div>
-    <h1>Acesso do time</h1>
-    <p>Entre com o usuário convidado no projeto Supabase.</p>
-    <label class="f" for="login-email">E-mail</label>
-    <input type="email" id="login-email" autocomplete="email" required>
-    <label class="f" for="login-password">Senha</label>
-    <input type="password" id="login-password" autocomplete="current-password" required>
-    <button class="btn" id="login-button" style="width:100%;margin-top:16px">Entrar</button>
-    <button class="btn ghost" id="magic-link-button" type="button" style="width:100%;margin-top:10px">Enviar link de acesso</button>
-    <p class="hint" style="margin-top:10px">Primeiro acesso ou sem senha? Enviamos um link seguro para seu e-mail.</p>
-    <p class="error" id="login-error" role="alert"></p>
-  </form>
+    <form class="auth-view" id="login-form">
+      <h1>Acesso do time</h1>
+      <p>Uso exclusivo do time 7Cantos.</p>
+      <label class="f" for="login-email">E-mail corporativo</label>
+      <input type="email" id="login-email" autocomplete="username" inputmode="email" placeholder="nome@7cantos.com" required>
+      <label class="f" for="login-password">Senha</label>
+      <input type="password" id="login-password" autocomplete="current-password" required>
+      <button class="btn" id="login-button" style="width:100%;margin-top:16px">Entrar</button>
+      <button class="auth-link" id="show-recovery" type="button">Esqueci minha senha</button>
+      <p class="auth-feedback" id="login-message" role="status"></p>
+      <p class="error" id="login-error" role="alert"></p>
+    </form>
+
+    <form class="auth-view" id="recovery-form" hidden>
+      <h1>Recuperar acesso</h1>
+      <p>Enviaremos um link de redefinição para um e-mail <b>@7cantos.com</b> já cadastrado.</p>
+      <label class="f" for="recovery-email">E-mail corporativo</label>
+      <input type="email" id="recovery-email" autocomplete="email" inputmode="email" placeholder="nome@7cantos.com" required>
+      <button class="btn" id="recovery-button" style="width:100%;margin-top:16px">Enviar link de recuperação</button>
+      <button class="auth-link" id="back-to-login" type="button">Voltar para o login</button>
+      <p class="auth-feedback" id="recovery-message" role="status"></p>
+    </form>
+
+    <form class="auth-view" id="new-password-form" hidden>
+      <h1>Criar nova senha</h1>
+      <p>Defina uma senha forte para concluir a recuperação.</p>
+      <label class="f" for="new-password">Nova senha</label>
+      <input type="password" id="new-password" autocomplete="new-password" minlength="12" required>
+      <p class="password-rules">Mínimo de 12 caracteres, com maiúscula, minúscula, número e símbolo.</p>
+      <label class="f" for="confirm-password">Confirmar nova senha</label>
+      <input type="password" id="confirm-password" autocomplete="new-password" minlength="12" required>
+      <button class="btn" id="new-password-button" style="width:100%;margin-top:16px">Salvar nova senha</button>
+      <p class="auth-feedback" id="new-password-message" role="status"></p>
+    </form>
+  </div>
 </div>
 
 <dialog class="modal" id="contact-modal">
@@ -657,4 +686,5 @@ button:disabled{cursor:not-allowed;opacity:.55}
 <script src="./quick-entry.js"></script>
 <script src="./radar.js"></script>
 <script src="./enrichment.js"></script>
+<script src="./auth.js"></script>
 <script src="./app.js"></script>
