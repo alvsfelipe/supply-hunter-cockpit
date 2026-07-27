@@ -112,6 +112,13 @@ coletam de uma a três fichas por rodada no bairro escolhido. A função usa `@s
 sessão e grava com o cliente sujeito às políticas RLS do usuário. Para outros
 bairros ou lotes maiores, use os comandos Python locais.
 
+O resultado aparece em **Radar**, não diretamente na fila comercial. Cada ficha
+mantém o vínculo com o empreendimento, a incorporadora e a URL de origem. Use
+**Criar oportunidade** para promover o alvo ao pipeline. Quando o Ghar publica o
+total de unidades, o formulário vem preenchido com essa contagem; quando o Meu
+Imóvel não informa o total, o hunter precisa preenchê-lo e confirmar a origem
+antes de salvar. A mesma ficha não é promovida duas vezes pela interface.
+
 ### OLX: limite operacional atual
 
 Em 26/07/2026, o `robots.txt` público da OLX bloqueia as URLs de busca que usam os
@@ -140,6 +147,7 @@ detectados, ignorados e não gravados automaticamente.
 public/index.html                  design system e markup do cockpit
 public/app.js                     Auth e persistência Supabase
 public/quick-entry.js             geração e interpretação local da entrada OLX
+public/radar.js                   validação da promoção de empreendimentos
 public/config.js                  configuração pública do projeto hospedado
 public/config.example.js          modelo de configuração pública
 collector/coletor_v0.py           coleta, eventos, score e criação de alvos

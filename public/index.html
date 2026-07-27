@@ -161,6 +161,17 @@ pre b{color:#F0C99A;font-weight:400}
 .quick-result[data-state="target"]{border-color:var(--pine);background:var(--pine-l)}
 .quick-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}
 .quick-url{font:12px/1.5 "IBM Plex Mono",monospace;word-break:break-all;color:var(--pine);margin-top:8px}
+.radar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.radar-card{background:var(--card);border:1px solid var(--rule);border-radius:var(--r);padding:17px;display:flex;flex-direction:column;gap:11px}
+.radar-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.radar-card .source{font:10px "IBM Plex Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+.radar-data{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--rule2);border-bottom:1px solid var(--rule2)}
+.radar-data div{padding:9px 7px;border-right:1px solid var(--rule2)}
+.radar-data div:last-child{border-right:0}
+.radar-data b{display:block;font:600 15px Archivo,sans-serif}
+.radar-data span{font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em}
+.radar-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto}
+.radar-actions a{font-size:12px;color:var(--pine)}
 button:disabled{cursor:not-allowed;opacity:.55}
 
 @media (max-width:860px){
@@ -183,6 +194,7 @@ button:disabled{cursor:not-allowed;opacity:.55}
   <div class="brand"><b>Supply Hunter</b><span>7Cantos · São Paulo</span></div>
   <button data-t="hoje" aria-current="true">Hoje <em class="n" id="n-hoje"></em></button>
   <button data-t="pipe">Oportunidades <em class="n" id="n-pipe"></em></button>
+  <button data-t="radar">Radar <em class="n" id="n-radar"></em></button>
   <button data-t="entrada">Entrada rápida</button>
   <button data-t="qual">Qualificar</button>
   <button data-t="scripts">Scripts</button>
@@ -250,6 +262,18 @@ button:disabled{cursor:not-allowed;opacity:.55}
       </div>
       <div style="margin-top:15px"><button class="btn" id="add">Adicionar à fila</button></div>
     </div>
+  </div>
+</section>
+
+<!-- RADAR -->
+<section id="t-radar">
+  <header class="pg">
+    <h1>Radar de empreendimentos</h1>
+    <p>Fichas coletadas no Ghar e Meu Imóvel. Revise a fonte e promova somente os alvos que devem entrar no pipeline comercial.</p>
+  </header>
+  <div class="stack">
+    <div class="note"><b>Regra de promoção:</b> o Ghar pode trazer unidades publicadas na ficha. No Meu Imóvel, informe e confirme a quantidade antes de criar a oportunidade.</div>
+    <div class="radar-grid" id="radar"></div>
   </div>
 </section>
 
@@ -436,7 +460,22 @@ button:disabled{cursor:not-allowed;opacity:.55}
   </form>
 </dialog>
 
+<dialog class="modal" id="promote-modal">
+  <form class="modal-card" id="promote-form">
+    <div class="modal-head"><div><h2>Criar oportunidade</h2><p class="sub" id="promote-building"></p></div><button class="modal-close" type="button" data-close-promote aria-label="Fechar">×</button></div>
+    <input type="hidden" id="promote-id">
+    <div class="grid2">
+      <div><label class="f" for="promote-units">Unidades representadas</label><input type="number" id="promote-units" min="1" required><p class="hint" id="promote-units-hint"></p></div>
+      <div><label class="f" for="promote-score">Supply Score inicial</label><input type="number" id="promote-score" min="0" max="100" value="60" required><p class="hint">Pode ser recalculado depois na aba Qualificar.</p></div>
+    </div>
+    <div class="chk"><input type="checkbox" id="promote-confirmed" required><label for="promote-confirmed"><b>Quantidade conferida</b><span id="promote-confirmed-label">Confirme o número em uma fonte pública ou com a incorporadora.</span></label></div>
+    <div class="note" id="promote-source-note"></div>
+    <div class="form-actions"><button class="btn ghost" type="button" data-close-promote>Cancelar</button><button class="btn" id="promote-save" type="submit">Adicionar ao pipeline</button></div>
+  </form>
+</dialog>
+
 <script src="./config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.106.2/dist/umd/supabase.min.js"></script>
 <script src="./quick-entry.js"></script>
+<script src="./radar.js"></script>
 <script src="./app.js"></script>

@@ -22,6 +22,8 @@
   let user;
   let sessionStarted = false;
   let opportunities = [];
+  let buildings = [];
+  let organizations = new Map();
   let runs = {};
 
   const config = window.SUPABASE_CONFIG || {};
@@ -64,20 +66,26 @@
 
   async function loadData() {
     setStatus('Sincronizando com o Supabase…');
-    const [opportunityResult, runResult] = await Promise.all([
+    const [opportunityResult, buildingResult, organizationResult, runResult] = await Promise.all([
       db.from('opportunities').select('*').order('priority_score', {ascending: false}),
+      db.from('buildings').select('*').order('last_seen_at', {ascending: false}),
+      db.from('organizations').select('id,name'),
       db.from('agent_runs').select('script,finished_at').eq('status', 'completed').order('finished_at', {ascending: false}).limit(50)
     ]);
     if (opportunityResult.error) throw opportunityResult.error;
+    if (buildingResult.error) throw buildingResult.error;
+    if (organizationResult.error) throw organizationResult.error;
     if (runResult.error) throw runResult.error;
     opportunities = opportunityResult.data || [];
+    buildings = buildingResult.data || [];
+    organizations = new Map((organizationResult.data || []).map(item => [item.id, item.name]));
     runs = {};
     for (const run of runResult.data || []) {
       if (!runs[run.script]) runs[run.script] = new Date(run.finished_at).toLocaleString('pt-BR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
     }
     renderAll();
     renderScripts();
-    setStatus(`Supabase sincronizado · ${opportunities.length} oportunidades`);
+    setStatus(`Supabase sincronizado · ${opportunities.length} oportunidades · ${buildings.length} no radar`);
   }
 
   function renderQueue() {
@@ -118,6 +126,32 @@
     $('#funil').innerHTML = STAGES.map(stage => {
       const group = opportunities.filter(item => item.stage === stage);
       return `<tr><td>${stage}</td><td class="num">${group.length}</td><td class="num">${group.reduce((sum, item) => sum + item.units_represented, 0)}</td></tr>`;
+    }).join('');
+  }
+
+  function renderRadar() {
+    const promoted = new Map(opportunities.filter(item => item.building_id).map(item => [item.building_id, item]));
+    const pending = buildings.filter(item => !promoted.has(item.id)).length;
+    $('#n-radar').textContent = pending;
+    if (!buildings.length) {
+      $('#radar').innerHTML = '<div class="empty">Nenhum empreendimento coletado. Execute Ghar ou Meu Imóvel na aba Scripts.</div>';
+      return;
+    }
+    $('#radar').innerHTML = buildings.map(building => {
+      const opportunity = promoted.get(building.id);
+      const developer = organizations.get(building.developer_organization_id);
+      const source = window.SupplyHunterRadar.sourceLabel(building.source);
+      const units = building.total_units_estimated;
+      const area = building.area_min_m2 || building.area_max_m2
+        ? `${building.area_min_m2 || '?'}–${building.area_max_m2 || '?'} m²`
+        : 'não informada';
+      const href = window.SupplyHunterRadar.safeUrl(building.source_url);
+      return `<article class="radar-card">
+        <div class="radar-head"><div><div class="source">${escapeHtml(source)}</div><div class="nm">${escapeHtml(building.name || building.address)}</div><div class="meta">${escapeHtml(building.address)} · ${escapeHtml(building.polo)}</div></div>${opportunity ? '<span class="tag p">no pipeline</span>' : '<span class="tag g">novo</span>'}</div>
+        ${developer ? `<div class="why">Incorporadora: <b>${escapeHtml(developer)}</b></div>` : ''}
+        <div class="radar-data"><div><b>${units || '—'}</b><span>unidades</span></div><div><b>${building.total_floors || '—'}</b><span>andares</span></div><div><b>${escapeHtml(area)}</b><span>área</span></div></div>
+        <div class="radar-actions">${href !== '#' ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">Abrir fonte ↗</a>` : '<span></span>'}${opportunity ? '<button class="btn ghost" type="button" disabled>Já promovido</button>' : `<button class="btn" type="button" data-promote="${building.id}">Criar oportunidade</button>`}</div>
+      </article>`;
     }).join('');
   }
 
@@ -162,8 +196,9 @@
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const count = data?.collected || 0;
-      toast(count ? `${count} empreendimento gravado no Supabase.` : 'Nenhuma ficha completa encontrada.');
+      toast(count ? `${count} empreendimento gravado. Revise no Radar.` : 'Nenhuma ficha completa encontrada.');
       await loadData();
+      if (count) document.querySelector('nav button[data-t="radar"]')?.click();
     } catch (error) {
       setStatus('Falha na coleta', 'error');
       toast(friendlyError(error));
@@ -177,7 +212,66 @@
     renderQueue();
     renderSummary();
     renderPipeline();
+    renderRadar();
     renderMix();
+  }
+
+  function openPromotion(id) {
+    const building = buildings.find(item => item.id === id);
+    if (!building) return;
+    if (opportunities.some(item => item.building_id === id)) return toast('Este empreendimento já está no pipeline.');
+    const hasPublishedUnits = Number(building.total_units_estimated) > 0;
+    const source = window.SupplyHunterRadar.sourceLabel(building.source);
+    $('#promote-form').reset();
+    $('#promote-id').value = building.id;
+    $('#promote-building').textContent = `${building.name || building.address} · ${source}`;
+    $('#promote-units').value = hasPublishedUnits ? building.total_units_estimated : '';
+    $('#promote-score').value = hasPublishedUnits ? 65 : 55;
+    $('#promote-units-hint').textContent = hasPublishedUnits
+      ? 'Quantidade publicada na ficha coletada.'
+      : 'Campo ausente na coleta. Confirme antes de continuar.';
+    $('#promote-confirmed').checked = hasPublishedUnits;
+    $('#promote-confirmed-label').textContent = hasPublishedUnits
+      ? 'A quantidade veio da ficha pública vinculada abaixo.'
+      : 'Conferi o número em uma fonte pública ou com a incorporadora.';
+    const href = window.SupplyHunterRadar.safeUrl(building.source_url);
+    $('#promote-source-note').innerHTML = href === '#'
+      ? '<b>Fonte indisponível.</b> Confirme os dados antes de promover.'
+      : `<b>Revise a origem:</b> <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">abrir ficha de ${escapeHtml(source)} ↗</a>`;
+    $('#promote-modal').showModal();
+  }
+
+  async function savePromotion(event) {
+    event.preventDefault();
+    const building = buildings.find(item => item.id === $('#promote-id').value);
+    if (!building) return toast('Empreendimento não encontrado. Atualize o radar.');
+    const units = Number($('#promote-units').value);
+    const score = Number($('#promote-score').value);
+    if (!Number.isInteger(units) || units < 1) return toast('Informe uma quantidade válida de unidades.');
+    if (!$('#promote-confirmed').checked) return toast('Confirme a quantidade antes de criar a oportunidade.');
+    if (!Number.isFinite(score) || score < 0 || score > 100) return toast('O Supply Score deve ficar entre 0 e 100.');
+
+    $('#promote-save').disabled = true;
+    try {
+      const duplicateResult = await db.from('opportunities').select('id').eq('building_id', building.id).limit(1).maybeSingle();
+      if (duplicateResult.error) throw duplicateResult.error;
+      if (duplicateResult.data) {
+        await loadData();
+        $('#promote-modal').close();
+        return toast('Este empreendimento já estava no pipeline.');
+      }
+      const payload = window.SupplyHunterRadar.promotionPayload(building, units, score);
+      const result = await db.from('opportunities').insert(payload).select().single();
+      if (result.error) throw result.error;
+      opportunities.push(result.data);
+      $('#promote-modal').close();
+      renderAll();
+      toast('Oportunidade criada e vinculada ao empreendimento.');
+    } catch (error) {
+      toast(friendlyError(error));
+    } finally {
+      $('#promote-save').disabled = false;
+    }
   }
 
   function calculateScore() {
@@ -434,6 +528,8 @@
     document.addEventListener('click', async event => {
       const data = event.target.dataset;
       if (Object.hasOwn(data, 'closeContact')) $('#contact-modal').close();
+      if (Object.hasOwn(data, 'closePromote')) $('#promote-modal').close();
+      if (data.promote) openPromotion(data.promote);
       if (data.log) openContact(data.log);
       if (data.del) {
         const item = opportunities.find(opportunity => opportunity.id === data.del);
@@ -488,6 +584,7 @@
     });
 
     $('#contact-form').addEventListener('submit', saveContact);
+    $('#promote-form').addEventListener('submit', savePromotion);
     $('#logout').addEventListener('click', async () => { await db.auth.signOut(); window.location.reload(); });
   }
 
