@@ -9,24 +9,29 @@ O coletor grava no Supabase, compara com o histórico e emite três coisas:
   2. organizações  (anunciantes com >= MIN_CARTEIRA anúncios ativos = alvo de carteira)
   3. supply score  (100 pontos, conforme spec do agente v2)
 
-RODAR LOCALMENTE. O ambiente do Claude não tem saída de rede para portais.
+RODAR LOCALMENTE.
 
     pip install -r requirements.txt
     export SUPABASE_URL=https://SEU-PROJETO.supabase.co
     export SUPABASE_SECRET_KEY=sb_secret_...
-    python coletor_v0.py --dry-run     # valida parsing sem gravar
-    python coletor_v0.py               # roda e grava snapshot
+    python coletor_v0.py --mostrar-url --bairro moema --preco-min 3000 --preco-max 6000
+    python coletor_v0.py --portal meu_imovel --bairro moema --max-itens 3 --dry-run
+    python coletor_v0.py --portal meu_imovel --max-itens 30
 
 IMPORTANTE — LEIA ANTES DE RODAR
-  · Os seletores CSS em PORTAIS são PLACEHOLDERS. Abra o portal, inspecione o HTML
-    e substitua. Nenhum seletor sobrevive a um redesign; validar é parte do trabalho.
-  · Respeite robots.txt e os termos de uso de cada portal. Use DELAY generoso.
+  · O gerador de URL da OLX não executa scraping. Em 26/07/2026, o robots.txt da
+    OLX bloqueia buscas automatizadas com q, ps, pe e o.
+  · A OLX permanece em fluxo manual assistido. O adaptador Meu Imóvel usa apenas
+    HTML e JSON-LD das páginas públicas; nunca acessa /api/.
+  · Respeite robots.txt e os termos de uso de cada portal.
   · Para volume sério, contrate API oficial ou provedor de dados. Scraping é o v0.
 """
 
 import argparse, json, math, os, re, sys, time, unicodedata
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import urlencode, urlparse
 
 try:
     import requests
@@ -37,39 +42,83 @@ except ImportError:
 
 # ─────────────────────────────── CONFIG ────────────────────────────────
 
-DELAY = 2.5           # segundos entre requisições — não reduza
+DELAY = 6.0           # mínimo para fontes autorizadas; não é mecanismo antidetecção
 MIN_CARTEIRA = 5      # anúncios ativos do mesmo anunciante para virar alvo de carteira
 TICKET_MIN, TICKET_MAX = 2200, 10000
 AREA_MIN, AREA_MAX = 24, 40
 
 # Polos ativos. Só Z1 e Z2 geram tarefa (spec do agente v2).
 BAIRROS = {
-    "Z1": ["vila-mariana", "vila-clementino", "moema", "paraiso", "ipiranga", "indianopolis"],
-    "Z2": ["brooklin", "campo-belo", "vila-olimpia", "itaim-bibi", "cidade-moncoes"],
+    "Z1": ["vila-mariana", "vila-clementino", "moema", "paraiso", "ipiranga", "indianopolis", "nova-klabin"],
+    "Z2": ["brooklin", "campo-belo", "vila-olimpia", "itaim-bibi", "cidade-moncoes", "santo-amaro"],
+}
+
+OLX_BASE = "https://www.olx.com.br/imoveis/aluguel/apartamentos/estado-sp/sao-paulo-e-regiao"
+OLX_ROTAS = {
+    bairro: f"zona-sul/{bairro}"
+    for bairros in BAIRROS.values()
+    for bairro in bairros
 }
 
 PORTAIS = {
-    # nome: (template de URL, seletor do card, seletores dos campos)
-    # >>> SUBSTITUA os seletores após inspecionar o HTML real de cada portal <<<
-    "portal_a": {
-        "url": "https://EXEMPLO.com.br/aluguel/sp/sao-paulo/{bairro}?pagina={pagina}",
-        "card": "div[data-testid='listing-card']",
-        "campos": {
-            "url":        ("a", "href"),
-            "preco":      ("[data-testid='price']", "text"),
-            "area":       ("[data-testid='area']", "text"),
-            "quartos":    ("[data-testid='bedrooms']", "text"),
-            "endereco":   ("[data-testid='address']", "text"),
-            "anunciante": ("[data-testid='advertiser']", "text"),
-        },
+    "meu_imovel": {
+        "url": "https://appmeuimovel.com/apartamentos?estagio=pronto",
+        "tipo": "empreendimentos",
     },
 }
 
 HEADERS = {"User-Agent": "7Cantos-SupplyHunter/0.2"}
 
+
+def montar_url_olx(bairro, preco_min=None, preco_max=None, pagina=1):
+    """Monta uma URL navegável da OLX sem realizar qualquer requisição."""
+    bairro = norm_texto(bairro).replace(" ", "-")
+    if bairro not in OLX_ROTAS:
+        permitidos = ", ".join(sorted(OLX_ROTAS))
+        raise ValueError(f"Bairro não configurado: {bairro}. Opções: {permitidos}")
+    if preco_min is not None and preco_min < 0:
+        raise ValueError("O valor mínimo não pode ser negativo.")
+    if preco_max is not None and preco_max < 0:
+        raise ValueError("O valor máximo não pode ser negativo.")
+    if preco_min is not None and preco_max is not None and preco_min > preco_max:
+        raise ValueError("O valor mínimo não pode ser maior que o máximo.")
+    if pagina < 1:
+        raise ValueError("A página deve ser maior ou igual a 1.")
+
+    parametros = {}
+    if preco_min is not None:
+        parametros["ps"] = int(preco_min)
+    if preco_max is not None:
+        parametros["pe"] = int(preco_max)
+    if pagina > 1:
+        parametros["o"] = pagina
+    url = f"{OLX_BASE}/{OLX_ROTAS[bairro]}"
+    return f"{url}?{urlencode(parametros)}" if parametros else url
+
 # ─────────────────────────────── BANCO ─────────────────────────────────
 
+def carregar_env_local():
+    """Carrega o .env da raiz sem sobrescrever variáveis já exportadas."""
+    arquivo = Path(__file__).resolve().parent.parent / ".env"
+    if not arquivo.is_file():
+        return
+    for linha_bruta in arquivo.read_text(encoding="utf-8").splitlines():
+        linha = linha_bruta.strip()
+        if not linha or linha.startswith("#"):
+            continue
+        if linha.startswith("export "):
+            linha = linha[7:].strip()
+        nome, separador, valor = linha.partition("=")
+        nome, valor = nome.strip(), valor.strip()
+        if not separador or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", nome):
+            continue
+        if len(valor) >= 2 and valor[0] == valor[-1] and valor[0] in {'"', "'"}:
+            valor = valor[1:-1]
+        os.environ.setdefault(nome, valor)
+
+
 def conectar() -> Client:
+    carregar_env_local()
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_SECRET_KEY")
     if not url or not key:
@@ -80,6 +129,21 @@ def conectar() -> Client:
     if not key.startswith(("sb_secret_", "eyJ")):
         sys.exit("SUPABASE_SECRET_KEY não parece uma secret/service_role key válida.")
     return create_client(url, key)
+
+
+def validar_fontes():
+    placeholders = [
+        nome for nome, cfg in PORTAIS.items()
+        if "EXEMPLO" in cfg.get("url", "").upper()
+    ]
+    if not placeholders:
+        return
+    nomes = ", ".join(placeholders)
+    sys.exit(
+        f"Fontes ainda não configuradas: {nomes}. "
+        "O acesso ao Supabase está separado da coleta: substitua a URL e os "
+        "seletores placeholder em PORTAIS após validar o HTML e os termos da fonte."
+    )
 
 # ────────────────────────── NORMALIZAÇÃO ───────────────────────────────
 
@@ -110,7 +174,147 @@ def num(s):
     try: return float(t)
     except ValueError: return None
 
+def polo_do_bairro(bairro):
+    bairro = norm_texto(bairro).replace(" ", "-")
+    return next((polo for polo, bairros in BAIRROS.items() if bairro in bairros), None)
+
+def faixa_numerica(texto):
+    valores = [float(valor.replace(",", ".")) for valor in re.findall(r"\d+(?:[.,]\d+)?", texto or "")]
+    if not valores:
+        return None, None
+    return min(valores), max(valores)
+
 # ─────────────────────────────── COLETA ────────────────────────────────
+
+def extrair_links_meu_imovel(html, bairro=None):
+    """Lê a lista pública JSON-LD e devolve apenas bairros dos polos ativos."""
+    links, vistos = [], set()
+    bairro_filtro = norm_texto(bairro).replace(" ", "-") if bairro else None
+    soup = BeautifulSoup(html, "html.parser")
+    for script in soup.select('script[type="application/ld+json"]'):
+        try:
+            dados = json.loads(script.string or script.get_text())
+        except (json.JSONDecodeError, TypeError):
+            continue
+        objetos = dados if isinstance(dados, list) else [dados]
+        for objeto in objetos:
+            if not isinstance(objeto, dict):
+                continue
+            itens = (objeto.get("mainEntity") or {}).get("itemListElement") or []
+            for entrada in itens:
+                item = entrada.get("item", entrada) if isinstance(entrada, dict) else {}
+                url = item.get("url") if isinstance(item, dict) else None
+                if not url or url in vistos:
+                    continue
+                partes = [p for p in urlparse(url).path.split("/") if p]
+                try:
+                    indice = partes.index("sao-paulo")
+                    bairro_url = partes[indice + 1]
+                except (ValueError, IndexError):
+                    continue
+                polo = polo_do_bairro(bairro_url)
+                if not polo or (bairro_filtro and bairro_url != bairro_filtro):
+                    continue
+                vistos.add(url)
+                links.append({
+                    "portal": "meu_imovel", "url": url,
+                    "external_id": partes[-1], "nome": item.get("name"),
+                    "bairro": bairro_url, "polo": polo,
+                })
+    return links
+
+def _ultimo_texto(soup, seletor):
+    textos = [el.get_text(" ", strip=True) for el in soup.select(seletor)]
+    return next((texto for texto in reversed(textos) if texto), None)
+
+def extrair_detalhe_meu_imovel(html, item):
+    """Extrai somente campos presentes na ficha pública do empreendimento."""
+    soup = BeautifulSoup(html, "html.parser")
+    detalhe = dict(item)
+    detalhe["nome"] = _ultimo_texto(soup, "h1#realtyName") or item.get("nome")
+    detalhe["endereco"] = (
+        _ultimo_texto(soup, ".single-endereco-mobile p")
+        or _ultimo_texto(soup, ".single-destaque-titulo-infos p")
+    )
+
+    campos = {}
+    for bloco in soup.select(".single-destaque-dados-imovel-item"):
+        texto = bloco.get_text(" ", strip=True)
+        valor = _ultimo_texto(bloco, ".numero")
+        if valor:
+            campos[norm_texto(texto.replace(valor, "", 1))] = valor
+    for rotulo, prefixo in (("area", "area"), ("quartos", "bedrooms"),
+                            ("suites", "suites"), ("vagas", "parking")):
+        valor = next((v for k, v in campos.items() if rotulo in k), None)
+        minimo, maximo = faixa_numerica(valor)
+        if prefixo != "area":
+            minimo = int(minimo) if minimo is not None else None
+            maximo = int(maximo) if maximo is not None else None
+        detalhe[f"{prefixo}_min"] = minimo
+        detalhe[f"{prefixo}_max"] = maximo
+
+    texto_pagina = soup.get_text(" ", strip=True)
+    entrega = re.search(
+        r"Data de entrega:\s*(.+?)(?=\s+(?:Valor|Preço|Conheça|Sobre|Características|R\$)|$)",
+        texto_pagina, re.I,
+    )
+    entrega_texto = entrega.group(1).strip(" .|") if entrega else None
+    detalhe["delivery_date_text"] = entrega_texto
+    entrega_norm = norm_texto(entrega_texto)
+    detalhe["delivery_status"] = (
+        "pronto" if "pronto" in entrega_norm
+        else ("em_construcao" if entrega_texto else None)
+    )
+
+    incorporadoras = [
+        img.get("alt", "").strip()
+        for img in soup.select(".single-incorporadora img[alt]")
+    ]
+    detalhe["incorporadora"] = next(
+        (nome for nome in reversed(incorporadoras) if nome), None
+    )
+    if not detalhe["incorporadora"]:
+        match = re.search(r"equipe da\s+([^.!|]+)", texto_pagina, re.I)
+        detalhe["incorporadora"] = match.group(1).strip() if match else None
+    return detalhe
+
+def requisicao_publica(url):
+    if urlparse(url).path.startswith("/api/"):
+        raise ValueError("O adaptador Meu Imóvel não acessa /api/.")
+    resposta = requests.get(url, headers=HEADERS, timeout=20)
+    if resposta.status_code in (403, 429):
+        raise RuntimeError(
+            f"Coleta interrompida: HTTP {resposta.status_code}; "
+            "nenhuma tentativa de contorno foi feita."
+        )
+    resposta.raise_for_status()
+    return resposta.text
+
+def coletar_meu_imovel(bairro=None, max_itens=30):
+    html_lista = requisicao_publica(PORTAIS["meu_imovel"]["url"])
+    links = extrair_links_meu_imovel(html_lista, bairro=bairro)[:max_itens]
+    achados = []
+    for indice, item in enumerate(links, 1):
+        time.sleep(DELAY)
+        try:
+            detalhe = extrair_detalhe_meu_imovel(
+                requisicao_publica(item["url"]), item
+            )
+        except (requests.RequestException, RuntimeError) as erro:
+            print(f"  ! Meu Imóvel {indice}/{len(links)}: {erro}")
+            break
+        if not detalhe.get("endereco"):
+            print(
+                f"  ! Meu Imóvel {indice}/{len(links)}: "
+                "ficha sem endereço; ignorada"
+            )
+            continue
+        achados.append(detalhe)
+        print(
+            f"  Meu Imóvel {indice}/{len(links)}: "
+            f"{detalhe.get('nome')} [{detalhe['bairro']}]"
+        )
+    return achados
 
 def extrair(card, seletores):
     out = {}
@@ -157,6 +361,7 @@ def coletar(portal, cfg, polo, bairro, max_paginas=10, dry=False):
                 "quartos": int(num(d.get("quartos")) or 0),
                 "anunciante": d.get("anunciante"),
                 "anunciante_norm": norm_texto(d.get("anunciante")),
+                "anunciante_tipo": norm_texto(d.get("anunciante_tipo")) or None,
             })
         print(f"  {portal}/{bairro} p{pagina}: {len(cards)} cards")
         if dry and pagina >= 1:
@@ -193,6 +398,7 @@ def gravar(con: Client, itens, hoje):
             "bedrooms": it["quartos"],
             "rent_price": it["preco"],
             "advertiser_name": it["anunciante"],
+            "advertiser_type": it.get("anunciante_tipo"),
             "last_seen_at": agora,
             "active": True,
         }
@@ -257,6 +463,66 @@ def gravar(con: Client, itens, hoje):
             removidos += 1
 
     return novos, alterados, removidos
+
+def gravar_empreendimentos(con: Client, itens):
+    """Faz upsert de incorporadoras e edifícios sem estimar unidades ausentes."""
+    agora = datetime.now(timezone.utc).isoformat()
+    criados, atualizados = 0, 0
+    for item in itens:
+        incorporadora_id = None
+        nome_incorporadora = item.get("incorporadora")
+        if nome_incorporadora:
+            existentes = (
+                con.table("organizations").select("id")
+                .ilike("name", nome_incorporadora).limit(1).execute().data
+            )
+            if existentes:
+                incorporadora_id = existentes[0]["id"]
+            else:
+                organizacao = con.table("organizations").insert({
+                    "name": nome_incorporadora,
+                    "type": "incorporadora",
+                    "polo": item["polo"],
+                    "source": "Meu Imóvel",
+                }).execute().data[0]
+                incorporadora_id = organizacao["id"]
+
+        payload = {
+            "name": item.get("nome"),
+            "address": item["endereco"],
+            "neighborhood": item["bairro"],
+            "polo": item["polo"],
+            "source": "meu_imovel",
+            "source_external_id": item["external_id"],
+            "source_url": item["url"],
+            "developer_organization_id": incorporadora_id,
+            "delivery_status": item.get("delivery_status"),
+            "delivery_date_text": item.get("delivery_date_text"),
+            "area_min_m2": item.get("area_min"),
+            "area_max_m2": item.get("area_max"),
+            "bedrooms_min": item.get("bedrooms_min"),
+            "bedrooms_max": item.get("bedrooms_max"),
+            "suites_min": item.get("suites_min"),
+            "suites_max": item.get("suites_max"),
+            "parking_min": item.get("parking_min"),
+            "parking_max": item.get("parking_max"),
+            "last_seen_at": agora,
+        }
+        existentes = (
+            con.table("buildings").select("id")
+            .eq("source", "meu_imovel")
+            .eq("source_external_id", item["external_id"])
+            .limit(1).execute().data
+        )
+        if existentes:
+            con.table("buildings").update(payload).eq(
+                "id", existentes[0]["id"]
+            ).execute()
+            atualizados += 1
+        else:
+            con.table("buildings").insert(payload).execute()
+            criados += 1
+    return criados, atualizados
 
 
 def dias_no_ar(listing, hoje):
@@ -444,9 +710,21 @@ def relatorio(con: Client, hoje):
 # ──────────────────────────────── MAIN ─────────────────────────────────
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--dry-run", action="store_true", help="1 página por bairro, não grava")
+    ap = argparse.ArgumentParser(
+        description="Coletor autorizado e gerador de URLs de pesquisa do Supply Hunter."
+    )
+    ap.add_argument("--dry-run", action="store_true", help="coleta uma amostra e não grava")
+    ap.add_argument("--portal", choices=sorted(PORTAIS), default="meu_imovel")
+    ap.add_argument(
+        "--max-itens", type=int,
+        help="limite de fichas (padrão: 3 no dry-run; 30 ao gravar)",
+    )
     ap.add_argument("--so-relatorio", action="store_true", help="só reimprime o brief")
+    ap.add_argument("--mostrar-url", action="store_true", help="gera a URL da OLX sem acessá-la")
+    ap.add_argument("--bairro", help="bairro configurado, por exemplo: moema")
+    ap.add_argument("--preco-min", type=float, help="aluguel mínimo em reais")
+    ap.add_argument("--preco-max", type=float, help="aluguel máximo em reais")
+    ap.add_argument("--pagina", type=int, default=1, help="página da busca (padrão: 1)")
     a = ap.parse_args()
 
     hoje = date.today().isoformat()
@@ -455,16 +733,26 @@ def main():
         relatorio(conectar(), hoje)
         return
 
-    todos = []
-    for polo, bairros in BAIRROS.items():
-        for bairro in bairros:
-            for portal, cfg in PORTAIS.items():
-                todos += coletar(portal, cfg, polo, bairro, dry=a.dry_run)
+    if a.mostrar_url:
+        if not a.bairro:
+            ap.error("--mostrar-url exige --bairro")
+        try:
+            print(montar_url_olx(a.bairro, a.preco_min, a.preco_max, a.pagina))
+        except ValueError as erro:
+            ap.error(str(erro))
+        return
+
+    if a.bairro and not polo_do_bairro(a.bairro):
+        ap.error(f"bairro não configurado: {a.bairro}")
+    max_itens = a.max_itens if a.max_itens is not None else (3 if a.dry_run else 30)
+    if max_itens < 1:
+        ap.error("--max-itens deve ser maior que zero")
+    todos = coletar_meu_imovel(a.bairro, max_itens)
 
     print(f"\ncoletados: {len(todos)}")
     if a.dry_run:
         print(json.dumps(todos[:3], ensure_ascii=False, indent=2))
-        print("\nDRY RUN — nada gravado. Se os campos vieram null, corrija os seletores em PORTAIS.")
+        print("\nDRY RUN — nada gravado. Campos ausentes permanecem null.")
         return
 
     con = conectar()
@@ -473,15 +761,16 @@ def main():
         "script": "collector/coletor_v0.py", "started_at": inicio, "status": "running",
     }).execute().data[0]
     try:
-        novos, reducoes, removidos = gravar(con, todos, hoje)
-        oportunidades = materializar_alvos(con, hoje)
-        print(f"novos: {novos} · reduções de preço: {reducoes} · removidos: {removidos}")
-        print(f"novas oportunidades de carteira: {len(oportunidades)}")
-        relatorio(con, hoje)
+        novos, atualizados = gravar_empreendimentos(con, todos)
+        print(f"empreendimentos novos: {novos} · atualizados: {atualizados}")
+        print(
+            "AÇÃO: confirmar total de unidades com a incorporadora ou fonte "
+            "primária antes de criar oportunidade."
+        )
         con.table("agent_runs").update({
             "finished_at": datetime.now(timezone.utc).isoformat(),
             "rows_in": len(todos),
-            "rows_out": novos + reducoes + removidos + len(oportunidades),
+            "rows_out": novos + atualizados,
             "status": "completed",
         }).eq("id", execucao["id"]).execute()
     except Exception as erro:

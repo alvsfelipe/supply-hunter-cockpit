@@ -11,10 +11,10 @@
     ['Unitário', 50, 1]
   ];
   const SCRIPTS = [
-    {id:'olx', t:'OLX', alvo:'Revelar quem tem carteira', extrai:'Identidade do anunciante, quantidade de anúncios ativos por anunciante, dias no ar, variação de preço, bairro, área e tipologia.', nao:'Não extrai telefone. O contato entra na ferramenta digitado por você depois de usar o botão de contato do próprio anúncio.', cmd:'python collector/coletor_v0.py --dry-run', ret:'Anunciantes com 5 ou mais anúncios ativos, candidatos a organização com carteira.'},
-    {id:'vr', t:'VivaReal e ZAP', alvo:'Radar de entregas e vacância de estreia', extrai:'Empreendimentos prontos para morar, incorporadora, faixa de metragem e endereço.', nao:'Respeite termos de uso, robots.txt e intervalo largo entre requisições.', cmd:'python collector/coletor_v0.py --dry-run', ret:'Entregas recentes nos polos ativos para validação humana.'},
-    {id:'ghar', t:'Ghar', alvo:'Mapear o universo de incorporadoras', extrai:'Diretório público de construtoras, incorporadoras e empreendimentos por status.', nao:'Serve para descobrir nomes; não trate curadoria de corretora como contagem de estoque.', cmd:'python collector/coletor_v0.py --dry-run', ret:'Nomes para cruzar com o radar de entregas.'},
-    {id:'amv', t:'appmeuimovel', alvo:'Ficha técnica do empreendimento', extrai:'Número de unidades, pavimentos, plantas, incorporadora e endereço.', nao:'Use apenas para confirmar o tamanho real antes da abordagem.', cmd:'python collector/coletor_v0.py --dry-run', ret:'Contagem confirmada, substituindo hipótese quando houver fonte.'}
+    {id:'olx', t:'OLX', alvo:'Revelar quem tem carteira', extrai:'Identidade do anunciante, quantidade de anúncios ativos por anunciante, dias no ar, variação de preço, bairro, área e tipologia.', nao:'Fluxo manual assistido: não faz scraping nem extrai telefone. Gere a busca, use a aba Entrada rápida e revise antes de salvar.', cmd:'python collector/coletor_v0.py --mostrar-url --bairro moema --preco-min 3000 --preco-max 6000', ret:'URL pronta para abrir e registrar manualmente os anunciantes recorrentes.'},
+    {id:'vr', t:'VivaReal e ZAP', alvo:'Radar de entregas e vacância de estreia', extrai:'Adaptador ainda não configurado.', nao:'Nenhuma coleta é executada até validar fonte, termos e campos públicos.', cmd:'Ainda não configurado — próximo portal', ret:'Sem dados nesta versão.'},
+    {id:'ghar', t:'Ghar', alvo:'Mapear o universo de incorporadoras', extrai:'Adaptador ainda não configurado.', nao:'Não trate curadoria de corretora como contagem de estoque.', cmd:'Ainda não configurado — próximo portal', ret:'Sem dados nesta versão.'},
+    {id:'amv', t:'Meu Imóvel', alvo:'Radar de empreendimentos novos e prontos', extrai:'Nome, estágio/data de entrega, endereço, bairro, área, quartos, suítes, vagas e incorporadora responsável.', nao:'Lê apenas páginas públicas com pausa fixa de 6 s; não acessa /api/. Total de unidades e pavimentos continuam null.', cmd:'python collector/coletor_v0.py --portal meu_imovel --bairro moema --max-itens 3 --dry-run', ret:'Empreendimentos em Z1/Z2 para cruzar com incorporadora e validar tamanho do alvo.'}
   ];
 
   const $ = selector => document.querySelector(selector);
@@ -159,6 +159,129 @@
     $('#q-lbl').textContent = count === 6 ? 'Oportunidade Qualificada' : `faltam ${6 - count} para qualificar`;
   }
 
+  function neighborhoodLabel(value) {
+    return value.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+      .replace('Paraiso', 'Paraíso').replace('Indianopolis', 'Indianópolis')
+      .replace('Moncoes', 'Monções').replace('Olimpia', 'Olímpia');
+  }
+
+  function initQuickEntry() {
+    const quick = window.SupplyHunterQuickEntry;
+    if (!quick) return;
+    const options = Object.entries(quick.neighborhoods)
+      .map(([neighborhood, polo]) => `<option value="${neighborhood}">${neighborhoodLabel(neighborhood)} · ${polo}</option>`)
+      .join('');
+    $('#qe-search-neighborhood').innerHTML = options;
+    $('#qe-neighborhood').innerHTML = `<option value="">Selecione</option>${options}`;
+    $('#qe-search-neighborhood').value = 'moema';
+  }
+
+  function buildQuickSearch() {
+    try {
+      const url = window.SupplyHunterQuickEntry.buildOlxUrl({
+        neighborhood: $('#qe-search-neighborhood').value,
+        minPrice: $('#qe-search-min').value,
+        maxPrice: $('#qe-search-max').value
+      });
+      $('#qe-search-url').textContent = url;
+      $('#qe-open-search').href = url;
+      $('#qe-open-search').hidden = false;
+    } catch (error) {
+      toast(error.message);
+    }
+  }
+
+  function fillQuickEntry(parsed) {
+    $('#qe-url').value = parsed.url || '';
+    $('#qe-advertiser').value = parsed.advertiserName || '';
+    $('#qe-advertiser-type').value = parsed.advertiserType || '';
+    $('#qe-address').value = parsed.address || '';
+    $('#qe-neighborhood').value = parsed.neighborhood || $('#qe-search-neighborhood').value || '';
+    $('#qe-price').value = parsed.rentPrice ?? '';
+    $('#qe-area').value = parsed.areaM2 ?? '';
+    $('#qe-bedrooms').value = parsed.bedrooms ?? '';
+    $('#qe-reviewed').checked = false;
+    $('#qe-contact-warning').hidden = !parsed.containsContactData;
+    $('#qe-result').textContent = parsed.externalId
+      ? 'Sugestões preenchidas. Revise os campos antes de salvar.'
+      : 'Não encontrei o código na URL. Cole a URL completa do anúncio no campo de revisão.';
+    $('#qe-result').dataset.state = '';
+    $('#qe-url').focus();
+  }
+
+  function clearQuickEntry({keepResult = false} = {}) {
+    $('#qe-form').reset();
+    $('#qe-paste').value = '';
+    $('#qe-contact-warning').hidden = true;
+    if (!keepResult) {
+      $('#qe-result').textContent = '';
+      $('#qe-result').dataset.state = '';
+    }
+    $('#qe-paste').focus();
+  }
+
+  async function saveQuickEntry(event) {
+    event.preventDefault();
+    const quick = window.SupplyHunterQuickEntry;
+    const url = $('#qe-url').value.trim();
+    const externalId = quick.externalIdFromUrl(url);
+    const advertiserName = $('#qe-advertiser').value.trim();
+    const neighborhood = $('#qe-neighborhood').value;
+    if (!externalId) return toast('A URL não contém um código de anúncio OLX reconhecível.');
+    if (!advertiserName) return toast('Confirme o nome do anunciante.');
+    if (!neighborhood) return toast('Confirme o bairro.');
+    if (!$('#qe-reviewed').checked) return toast('Revise os campos antes de salvar.');
+
+    const now = new Date().toISOString();
+    const payload = {
+      source: 'olx',
+      external_id: externalId,
+      url,
+      advertiser_name: advertiserName,
+      advertiser_type: $('#qe-advertiser-type').value || null,
+      rent_price: $('#qe-price').value === '' ? null : Number($('#qe-price').value),
+      neighborhood,
+      polo: quick.neighborhoods[neighborhood],
+      address: $('#qe-address').value.trim() || null,
+      area_m2: $('#qe-area').value === '' ? null : Number($('#qe-area').value),
+      bedrooms: $('#qe-bedrooms').value === '' ? null : Number($('#qe-bedrooms').value),
+      last_seen_at: now,
+      active: true
+    };
+    $('#qe-save').disabled = true;
+    try {
+      const existingResult = await db.from('property_listings')
+        .select('id,first_seen_at').eq('source', 'olx').eq('external_id', externalId).maybeSingle();
+      if (existingResult.error) throw existingResult.error;
+      let saved;
+      if (existingResult.data) {
+        const updateResult = await db.from('property_listings').update(payload)
+          .eq('id', existingResult.data.id).select().single();
+        if (updateResult.error) throw updateResult.error;
+        saved = updateResult.data;
+      } else {
+        const insertResult = await db.from('property_listings').insert({...payload, first_seen_at: now}).select().single();
+        if (insertResult.error) throw insertResult.error;
+        saved = insertResult.data;
+      }
+      const countResult = await db.from('property_listings').select('id', {count: 'exact', head: true})
+        .eq('source', 'olx').eq('active', true).eq('advertiser_name', advertiserName);
+      if (countResult.error) throw countResult.error;
+      const count = countResult.count || 1;
+      const action = count >= 5
+        ? `Alvo de carteira: ${advertiserName} já aparece em ${count} anúncios. Próxima ação: validar a organização na fila.`
+        : `${advertiserName}: ${count}/5 anúncios identificados. Próxima ação: continuar o mapeamento.`;
+      clearQuickEntry({keepResult: true});
+      $('#qe-result').textContent = `${existingResult.data ? 'Anúncio atualizado' : 'Anúncio salvo'} (${saved.external_id}). ${action}`;
+      $('#qe-result').dataset.state = count >= 5 ? 'target' : '';
+      toast(existingResult.data ? 'Anúncio atualizado no Supabase.' : 'Anúncio salvo no Supabase.');
+    } catch (error) {
+      toast(friendlyError(error));
+    } finally {
+      $('#qe-save').disabled = false;
+    }
+  }
+
   function openContact(id) {
     const opportunity = opportunities.find(item => item.id === id);
     if (!opportunity) return;
@@ -258,6 +381,20 @@
     });
 
     $('#q-unid').addEventListener('input', calculateScore);
+    $('#qe-build-url').addEventListener('click', buildQuickSearch);
+    $('#qe-parse').addEventListener('click', () => {
+      const text = $('#qe-paste').value;
+      if (!text.trim()) return toast('Cole o conteúdo do anúncio primeiro.');
+      fillQuickEntry(window.SupplyHunterQuickEntry.parseOlxText(text));
+    });
+    $('#qe-paste').addEventListener('keydown', event => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        $('#qe-parse').click();
+      }
+    });
+    $('#qe-clear').addEventListener('click', () => clearQuickEntry());
+    $('#qe-form').addEventListener('submit', saveQuickEntry);
     document.addEventListener('click', async event => {
       const data = event.target.dataset;
       if (Object.hasOwn(data, 'closeContact')) $('#contact-modal').close();
@@ -339,6 +476,7 @@
     $('#auth-gate').hidden = true;
     $('#session').hidden = false;
     $('#session-email').textContent = user.email;
+    initQuickEntry();
     bindEvents();
     calculateScore();
     calculateCriteria();

@@ -99,7 +99,7 @@ select.st{width:100%;padding:6px 8px;border:1px solid var(--rule);border-radius:
 .panel h3{font-size:15px;font-weight:700;margin-bottom:4px}
 .panel .sub{font-size:12.5px;color:var(--mute);margin-bottom:14px}
 label.f{display:block;font-size:12px;color:var(--mute);margin:11px 0 4px}
-input[type=text],input[type=number],select,textarea{width:100%;padding:8px 10px;
+input[type=text],input[type=number],input[type=url],select,textarea{width:100%;padding:8px 10px;
   border:1px solid var(--rule);border-radius:var(--r);background:#fff}
 textarea{min-height:64px;resize:vertical}
 .chk{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--rule2);font-size:13.5px}
@@ -156,6 +156,11 @@ pre b{color:#F0C99A;font-weight:400}
 .modal-close{font-size:24px;line-height:1;color:var(--mute)}
 .form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
 .hint{font-size:11px;color:var(--mute);margin-top:4px}
+.quick-result{border:1px solid var(--rule);background:#fff;padding:12px 14px;margin-top:14px;border-radius:var(--r);font-size:13px}
+.quick-result:empty{display:none}
+.quick-result[data-state="target"]{border-color:var(--pine);background:var(--pine-l)}
+.quick-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.quick-url{font:12px/1.5 "IBM Plex Mono",monospace;word-break:break-all;color:var(--pine);margin-top:8px}
 button:disabled{cursor:not-allowed;opacity:.55}
 
 @media (max-width:860px){
@@ -178,6 +183,7 @@ button:disabled{cursor:not-allowed;opacity:.55}
   <div class="brand"><b>Supply Hunter</b><span>7Cantos · São Paulo</span></div>
   <button data-t="hoje" aria-current="true">Hoje <em class="n" id="n-hoje"></em></button>
   <button data-t="pipe">Oportunidades <em class="n" id="n-pipe"></em></button>
+  <button data-t="entrada">Entrada rápida</button>
   <button data-t="qual">Qualificar</button>
   <button data-t="scripts">Scripts</button>
   <button data-t="metas">Metas</button>
@@ -244,6 +250,62 @@ button:disabled{cursor:not-allowed;opacity:.55}
       </div>
       <div style="margin-top:15px"><button class="btn" id="add">Adicionar à fila</button></div>
     </div>
+  </div>
+</section>
+
+<!-- ENTRADA RAPIDA -->
+<section id="t-entrada">
+  <header class="pg">
+    <h1>Entrada rápida OLX</h1>
+    <p>Gere a busca, escolha o anúncio e cole aqui somente o conteúdo que você copiou manualmente. O navegador sugere os campos; você revisa antes de gravar.</p>
+  </header>
+  <div class="stack">
+    <div class="panel">
+      <h3>1. Montar busca</h3>
+      <div class="sub">A URL é criada localmente. O cockpit não acessa a OLX nem lê sua sessão.</div>
+      <div class="grid2">
+        <div><label class="f" for="qe-search-neighborhood">Bairro</label><select id="qe-search-neighborhood"></select></div>
+        <div class="grid2">
+          <div><label class="f" for="qe-search-min">Valor mínimo</label><input type="number" id="qe-search-min" min="0" step="100" placeholder="3000"></div>
+          <div><label class="f" for="qe-search-max">Valor máximo</label><input type="number" id="qe-search-max" min="0" step="100" placeholder="6000"></div>
+        </div>
+      </div>
+      <div class="quick-actions"><button class="btn" id="qe-build-url" type="button">Gerar busca</button><a class="btn ghost" id="qe-open-search" target="_blank" rel="noopener noreferrer" hidden>Abrir OLX</a></div>
+      <div class="quick-url" id="qe-search-url"></div>
+    </div>
+
+    <div class="panel">
+      <h3>2. Colar e interpretar</h3>
+      <div class="sub">Copie o bloco visível do anúncio. Telefone e e-mail são detectados, mas deliberadamente não são importados.</div>
+      <label class="f" for="qe-paste">Conteúdo copiado manualmente</label>
+      <textarea id="qe-paste" rows="9" placeholder="Cole aqui o texto e a URL do anúncio"></textarea>
+      <div class="quick-actions"><button class="btn" id="qe-parse" type="button">Interpretar colagem</button><span class="hint">Atalho: ⌘/Ctrl + Enter</span></div>
+      <div class="note" id="qe-contact-warning" hidden><b>Contato ignorado:</b> a colagem parece conter telefone ou e-mail. Esses valores não serão extraídos nem gravados automaticamente.</div>
+    </div>
+
+    <form class="panel" id="qe-form">
+      <h3>3. Revisar e salvar</h3>
+      <div class="sub">Campos sugeridos podem estar errados. Confirme contra o anúncio antes de salvar.</div>
+      <div class="grid2">
+        <div>
+          <label class="f" for="qe-url">URL do anúncio</label><input type="url" id="qe-url" required placeholder="https://sp.olx.com.br/...">
+          <label class="f" for="qe-advertiser">Anunciante</label><input type="text" id="qe-advertiser" required>
+          <label class="f" for="qe-advertiser-type">Tipo do anunciante</label><select id="qe-advertiser-type"><option value="">Não identificado</option><option value="profissional">Profissional</option><option value="particular">Particular</option></select>
+          <label class="f" for="qe-address">Endereço/localização</label><input type="text" id="qe-address">
+        </div>
+        <div>
+          <label class="f" for="qe-neighborhood">Bairro</label><select id="qe-neighborhood" required></select>
+          <label class="f" for="qe-price">Aluguel</label><input type="number" id="qe-price" min="0" step="0.01">
+          <div class="grid2">
+            <div><label class="f" for="qe-area">Área m²</label><input type="number" id="qe-area" min="0" step="0.01"></div>
+            <div><label class="f" for="qe-bedrooms">Quartos</label><input type="number" id="qe-bedrooms" min="0" step="1"></div>
+          </div>
+          <div class="chk"><input type="checkbox" id="qe-reviewed" required><label for="qe-reviewed"><b>Revisei os campos no anúncio</b><span>A origem foi copiada manualmente e os dados acima estão corretos.</span></label></div>
+        </div>
+      </div>
+      <div class="quick-actions"><button class="btn" id="qe-save" type="submit">Salvar e preparar próximo</button><button class="btn ghost" id="qe-clear" type="button">Limpar</button></div>
+      <div class="quick-result" id="qe-result" aria-live="polite"></div>
+    </form>
   </div>
 </section>
 
@@ -376,4 +438,5 @@ button:disabled{cursor:not-allowed;opacity:.55}
 
 <script src="./config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.106.2/dist/umd/supabase.min.js"></script>
+<script src="./quick-entry.js"></script>
 <script src="./app.js"></script>

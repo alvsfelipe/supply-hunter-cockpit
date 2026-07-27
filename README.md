@@ -64,24 +64,64 @@ Requer Python 3.9 ou superior.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r collector/requirements.txt
-cp .env.example .env
+cp -n .env.example .env
 ```
 
-Carregue as variáveis do `.env` no shell e rode:
+O coletor carrega automaticamente o `.env` da raiz, sem sobrescrever variáveis
+que você tenha exportado manualmente. Rode:
 
 ```bash
-python collector/coletor_v0.py --dry-run
-python collector/coletor_v0.py
+python collector/coletor_v0.py --mostrar-url --bairro moema --preco-min 3000 --preco-max 6000
+python collector/coletor_v0.py --portal meu_imovel --bairro moema --max-itens 3 --dry-run
+python collector/coletor_v0.py --portal meu_imovel --max-itens 30
 python collector/coletor_v0.py --so-relatorio
 ```
 
-A secret key é usada somente no processo Python local. Os seletores em `PORTAIS` ainda são placeholders: valide o HTML real, `robots.txt` e os termos de cada fonte antes de uma rodada gravável.
+A primeira linha apenas gera uma URL navegável, sem fazer requisição e sem usar o
+Supabase. Bairros aceitos: `brooklin`, `campo-belo`, `cidade-moncoes`, `indianopolis`,
+`ipiranga`, `itaim-bibi`, `moema`, `nova-klabin`, `paraiso`, `santo-amaro`,
+`vila-clementino`, `vila-mariana` e `vila-olimpia`. Também é possível passar
+`--pagina 2`.
+
+A secret key é usada somente no processo Python local.
+
+### Meu Imóvel: adaptador público
+
+O adaptador lê a listagem e as fichas públicas do Meu Imóvel, limita a coleta
+aos bairros Z1/Z2 e espera 6 segundos entre fichas. Ele não acessa `/api/`, para
+imediatamente em HTTP 403/429 e não usa técnicas de contorno. Rode primeiro com
+`--dry-run`; sem essa opção, incorporadoras e empreendimentos são gravados no
+Supabase. A fonte não exibe total de unidades ou pavimentos nas fichas verificadas,
+portanto esses valores permanecem `null` até confirmação primária.
+
+### OLX: limite operacional atual
+
+Em 26/07/2026, o `robots.txt` público da OLX bloqueia as URLs de busca que usam os
+parâmetros `q`, `ps`, `pe` e `o`. Por isso o projeto **gera a URL para revisão
+manual, mas não automatiza o scraping da OLX**. Intervalo aleatório, rotação de
+identidade, proxy ou solução de CAPTCHA não fazem parte do projeto.
+
+O schema já comporta os dados públicos necessários para consolidação de carteira:
+`advertiser_name` e `advertiser_type` (`profissional` ou `particular`). Telefone,
+e-mail e WhatsApp não são coletados. Para automatizar a OLX, use uma API/parceria
+autorizada e implemente-a como um adaptador em `collector/`, mantendo a mesma saída.
+
+### Entrada rápida OLX no cockpit
+
+Depois de entrar, abra **Entrada rápida**: gere a busca, escolha o anúncio na OLX,
+copie manualmente o bloco visível e cole no cockpit. O navegador sugere URL, código,
+anunciante, tipo, preço, área, quartos e bairro; revise e confirme para gravar em
+`property_listings`. O salvamento atualiza anúncios repetidos e mostra quantos
+anúncios já foram associados ao mesmo anunciante. Ao chegar a cinco, a interface
+marca o anunciante como alvo de carteira. Telefone/e-mail presentes na colagem são
+detectados, ignorados e não gravados automaticamente.
 
 ## Estrutura
 
 ```
 public/index.html                  design system e markup do cockpit
 public/app.js                     Auth e persistência Supabase
+public/quick-entry.js             geração e interpretação local da entrada OLX
 public/config.js                  configuração pública do projeto hospedado
 public/config.example.js          modelo de configuração pública
 collector/coletor_v0.py           coleta, eventos, score e criação de alvos
@@ -96,6 +136,7 @@ CLAUDE.md                         contexto operacional permanente
 - A publishable key pode ficar no navegador porque RLS protege as linhas; a secret key nunca pode.
 - Cadastro é por convite e o papel vem de `app_metadata`, nunca de `user_metadata`.
 - Contato pessoal entra por ação humana. O coletor não captura telefone, e-mail ou WhatsApp.
+- A Entrada rápida interpreta somente conteúdo colado pelo hunter e ignora telefone/e-mail.
 - Nenhum envio ocorre sem aprovação humana.
 - Unidades HIS/HMP nunca entram em fluxo de curta temporada.
 - Campo desconhecido permanece `null`; estimativa é marcada como hipótese.
