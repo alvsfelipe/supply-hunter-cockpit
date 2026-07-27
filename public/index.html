@@ -101,7 +101,7 @@ select.st{width:100%;padding:6px 8px;border:1px solid var(--rule);border-radius:
 .panel h3{font-size:15px;font-weight:700;margin-bottom:4px}
 .panel .sub{font-size:12.5px;color:var(--mute);margin-bottom:14px}
 label.f{display:block;font-size:12px;color:var(--mute);margin:11px 0 4px}
-input[type=text],input[type=number],input[type=url],select,textarea{width:100%;padding:8px 10px;
+input[type=text],input[type=number],input[type=url],input[type=search],select,textarea{width:100%;padding:8px 10px;
   border:1px solid var(--rule);border-radius:var(--r);background:#fff}
 textarea{min-height:64px;resize:vertical}
 .chk{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--rule2);font-size:13.5px}
@@ -178,6 +178,40 @@ pre b{color:#F0C99A;font-weight:400}
 .radar-actions a{font-size:12px;color:var(--pine)}
 .script-command-head{display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px}
 .script-controls{display:flex;gap:10px;align-items:center;margin-top:12px;min-width:0}
+.clay-toolbar{display:grid;grid-template-columns:minmax(180px,240px) minmax(220px,1fr);gap:14px;align-items:end}
+.clay-toolbar label{margin-top:0}
+.clay-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.clay-stat{background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--brand);padding:13px 15px;border-radius:var(--r)}
+.clay-stat b{display:block;font:700 24px/1 "Plus Jakarta Sans",sans-serif;color:var(--brand-strong)}
+.clay-stat span{font:10px "IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+.clay-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:14px}
+.clay-card{background:var(--card);border:1px solid var(--rule);border-radius:var(--r);padding:17px;min-width:0}
+.clay-company-head{display:flex;align-items:flex-start;gap:11px}
+.clay-avatar{display:grid;place-items:center;flex:0 0 42px;height:42px;border-radius:var(--r);background:var(--nav);color:var(--brand);font:700 14px "Plus Jakarta Sans",sans-serif}
+.clay-company-main{min-width:0;flex:1}
+.clay-company-main .nm{overflow-wrap:anywhere}
+.clay-company-links{display:flex;gap:9px;flex-wrap:wrap;margin-top:5px}
+.clay-company-links a,.contact-actions a{font-size:11.5px;color:#245AA8}
+.clay-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:13px 0;border-block:1px solid var(--rule2)}
+.clay-metrics div{padding:9px 6px;border-right:1px solid var(--rule2);min-width:0}
+.clay-metrics div:last-child{border-right:0}
+.clay-metrics b{display:block;font:600 13px "Plus Jakarta Sans",sans-serif;overflow-wrap:anywhere}
+.clay-metrics span{display:block;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+.clay-fit{font-size:12.5px;color:#344054;line-height:1.55}
+.clay-link{margin-top:13px;padding:10px 11px;background:var(--pine-l);border-left:3px solid var(--pine);font-size:12px}
+.clay-link b{display:block;color:#245AA8}
+.clay-contacts{margin-top:14px;border-top:1px solid var(--rule2)}
+.clay-contacts h4{font:600 11px "IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:12px 0 5px}
+.clay-contact{padding:10px 0;border-bottom:1px solid var(--rule2)}
+.clay-contact:last-child{border-bottom:0}
+.clay-contact-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.clay-contact-name{font-weight:600;font-size:13px}
+.clay-contact-title{font-size:11.5px;color:var(--mute);line-height:1.4;margin-top:1px}
+.contact-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:7px}
+.email-draft{margin-top:8px}
+.email-draft summary{cursor:pointer;color:#245AA8;font-size:11.5px;font-weight:600}
+.email-draft pre{white-space:pre-wrap;word-break:break-word;background:#F9FAFB;color:var(--ink);border:1px solid var(--rule2);font:11px/1.5 Inter,system-ui,sans-serif;margin-top:7px;max-height:220px}
+.email-draft .copy{margin-top:7px}
 button:disabled{cursor:not-allowed;opacity:.55}
 
 @media (max-width:1080px) and (min-width:861px){
@@ -266,6 +300,15 @@ button:disabled{cursor:not-allowed;opacity:.55}
   .radar-actions{align-items:stretch;flex-direction:column}
   .radar-actions a{min-height:40px;display:flex;align-items:center}
   .radar-actions .btn{width:100%}
+  .clay-toolbar{grid-template-columns:1fr}
+  .clay-overview{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
+  .clay-overview::-webkit-scrollbar{display:none}
+  .clay-stat{flex:0 0 130px;scroll-snap-align:start}
+  .clay-card{padding:14px}
+  .clay-metrics{grid-template-columns:1fr}
+  .clay-metrics div{display:flex;justify-content:space-between;gap:12px;border-right:0;border-bottom:1px solid var(--rule2)}
+  .clay-metrics div:last-child{border-bottom:0}
+  .clay-contact-head{display:block}
   .scorebox .n{font-size:40px}
   table{font-size:12px}
   th,td{padding:7px 6px}
@@ -309,6 +352,7 @@ button:disabled{cursor:not-allowed;opacity:.55}
   <button data-t="hoje" aria-current="true">Hoje <em class="n" id="n-hoje"></em></button>
   <button data-t="pipe">Oportunidades <em class="n" id="n-pipe"></em></button>
   <button data-t="radar">Radar <em class="n" id="n-radar"></em></button>
+  <button data-t="clay">Enriquecimento <em class="n" id="n-clay"></em></button>
   <button data-t="entrada">Entrada rápida</button>
   <button data-t="qual">Qualificar</button>
   <button data-t="scripts">Scripts</button>
@@ -388,6 +432,26 @@ button:disabled{cursor:not-allowed;opacity:.55}
   <div class="stack">
     <div class="note"><b>Regra de promoção:</b> o Ghar pode trazer unidades publicadas na ficha. No Meu Imóvel, informe e confirme a quantidade antes de criar a oportunidade.</div>
     <div class="radar-grid" id="radar"></div>
+  </div>
+</section>
+
+<!-- CLAY -->
+<section id="t-clay">
+  <header class="pg">
+    <h1>Enriquecimento Clay</h1>
+    <p>Empresas e decisores encontrados no Clay, cruzados com as oportunidades do cockpit. Contatos profissionais ficam restritos ao time autenticado e nenhum e-mail é enviado sem revisão humana.</p>
+  </header>
+  <div class="stack">
+    <div class="clay-overview" aria-label="Resumo do enriquecimento">
+      <div class="clay-stat"><b id="clay-company-count">0</b><span>empresas</span></div>
+      <div class="clay-stat"><b id="clay-contact-count">0</b><span>decisores</span></div>
+      <div class="clay-stat"><b id="clay-link-count">0</b><span>vínculos</span></div>
+    </div>
+    <div class="panel clay-toolbar">
+      <div><label class="f" for="clay-filter">Perfil</label><select id="clay-filter"><option value="">Todos os perfis</option><option value="incorporadora">Incorporadoras</option><option value="administradora">Administradoras</option><option value="proprietario">Proprietários</option><option value="linked">Vinculadas ao pipeline</option></select></div>
+      <div><label class="f" for="clay-search">Buscar empresa, decisor ou empreendimento</label><input type="search" id="clay-search" placeholder="Ex.: Tegra, diretor comercial, Brooklin"></div>
+    </div>
+    <div class="clay-grid" id="clay-results" aria-live="polite"></div>
   </div>
 </section>
 
@@ -592,4 +656,5 @@ button:disabled{cursor:not-allowed;opacity:.55}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.106.2/dist/umd/supabase.min.js"></script>
 <script src="./quick-entry.js"></script>
 <script src="./radar.js"></script>
+<script src="./enrichment.js"></script>
 <script src="./app.js"></script>

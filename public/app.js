@@ -25,6 +25,10 @@
   let buildings = [];
   let organizations = new Map();
   let runs = {};
+  let clayCompanies = [];
+  let clayContacts = [];
+  let clayLinks = [];
+  const clayDrafts = new Map();
 
   const config = window.SUPABASE_CONFIG || {};
   const configured = /^https:\/\/.+\.supabase\.co$/.test(config.url || '')
@@ -66,26 +70,35 @@
 
   async function loadData() {
     setStatus('Sincronizando com o Supabase…');
-    const [opportunityResult, buildingResult, organizationResult, runResult] = await Promise.all([
+    const [opportunityResult, buildingResult, organizationResult, runResult, clayCompanyResult, clayContactResult, clayLinkResult] = await Promise.all([
       db.from('opportunities').select('*').order('priority_score', {ascending: false}),
       db.from('buildings').select('*').order('last_seen_at', {ascending: false}),
       db.from('organizations').select('id,name'),
-      db.from('agent_runs').select('script,finished_at').eq('status', 'completed').order('finished_at', {ascending: false}).limit(50)
+      db.from('agent_runs').select('script,finished_at').eq('status', 'completed').order('finished_at', {ascending: false}).limit(50),
+      db.from('clay_companies').select('*').order('name'),
+      db.from('clay_contacts').select('*').order('name'),
+      db.from('clay_company_opportunities').select('*')
     ]);
     if (opportunityResult.error) throw opportunityResult.error;
     if (buildingResult.error) throw buildingResult.error;
     if (organizationResult.error) throw organizationResult.error;
     if (runResult.error) throw runResult.error;
+    if (clayCompanyResult.error) throw clayCompanyResult.error;
+    if (clayContactResult.error) throw clayContactResult.error;
+    if (clayLinkResult.error) throw clayLinkResult.error;
     opportunities = opportunityResult.data || [];
     buildings = buildingResult.data || [];
     organizations = new Map((organizationResult.data || []).map(item => [item.id, item.name]));
+    clayCompanies = clayCompanyResult.data || [];
+    clayContacts = clayContactResult.data || [];
+    clayLinks = clayLinkResult.data || [];
     runs = {};
     for (const run of runResult.data || []) {
       if (!runs[run.script]) runs[run.script] = new Date(run.finished_at).toLocaleString('pt-BR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
     }
     renderAll();
     renderScripts();
-    setStatus(`Supabase sincronizado · ${opportunities.length} oportunidades · ${buildings.length} no radar`);
+    setStatus(`Supabase sincronizado · ${opportunities.length} oportunidades · ${buildings.length} no radar · ${clayCompanies.length} no Clay`);
   }
 
   function renderQueue() {
@@ -162,6 +175,92 @@
     }).join('');
   }
 
+  function compactClayText(value, limit = 360) {
+    const clean = String(value || '')
+      .replace(/#{1,6}\s*/g, '')
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return clean.length > limit ? `${clean.slice(0, limit).trim()}…` : clean;
+  }
+
+  function companyInitials(name) {
+    return String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join('').toUpperCase();
+  }
+
+  function renderClay() {
+    const enrichment = window.SupplyHunterEnrichment;
+    const filter = $('#clay-filter')?.value || '';
+    const query = ($('#clay-search')?.value || '').trim().toLocaleLowerCase('pt-BR');
+    const linksByCompany = new Map();
+    const contactsByCompany = new Map();
+    for (const link of clayLinks) {
+      if (!linksByCompany.has(link.company_id)) linksByCompany.set(link.company_id, []);
+      linksByCompany.get(link.company_id).push(link);
+    }
+    for (const contact of clayContacts) {
+      if (!contactsByCompany.has(contact.company_id)) contactsByCompany.set(contact.company_id, []);
+      contactsByCompany.get(contact.company_id).push(contact);
+    }
+
+    $('#n-clay').textContent = clayCompanies.length;
+    $('#clay-company-count').textContent = clayCompanies.length;
+    $('#clay-contact-count').textContent = clayContacts.length;
+    $('#clay-link-count').textContent = clayLinks.length;
+    clayDrafts.clear();
+
+    const visible = clayCompanies.filter(company => {
+      const links = linksByCompany.get(company.id) || [];
+      const contacts = contactsByCompany.get(company.id) || [];
+      if (filter === 'linked' && !links.length) return false;
+      if (filter && filter !== 'linked' && company.profile_type !== filter) return false;
+      if (!query) return true;
+      const opportunityNames = links.map(link => opportunities.find(item => item.id === link.opportunity_id)?.name || '');
+      const haystack = [company.name, company.description, company.fit_summary, ...contacts.flatMap(contact => [contact.name, contact.title]), ...opportunityNames].join(' ').toLocaleLowerCase('pt-BR');
+      return haystack.includes(query);
+    });
+
+    if (!visible.length) {
+      $('#clay-results').innerHTML = '<div class="empty panel">Nenhum enriquecimento corresponde aos filtros.</div>';
+      return;
+    }
+
+    $('#clay-results').innerHTML = visible.map(company => {
+      const links = linksByCompany.get(company.id) || [];
+      const contacts = contactsByCompany.get(company.id) || [];
+      const primaryLink = links[0];
+      const opportunity = primaryLink ? opportunities.find(item => item.id === primaryLink.opportunity_id) : null;
+      const website = enrichment.safeExternalUrl(company.website_url);
+      const linkedin = enrichment.safeExternalUrl(company.linkedin_url);
+      const profileLabel = {incorporadora: 'Incorporadora', administradora: 'Administradora', proprietario: 'Proprietário'}[company.profile_type] || company.profile_type;
+      const companyLinks = [
+        website !== '#' ? `<a href="${escapeHtml(website)}" target="_blank" rel="noopener noreferrer">Site ↗</a>` : '',
+        linkedin !== '#' ? `<a href="${escapeHtml(linkedin)}" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>` : ''
+      ].filter(Boolean).join('');
+      const fit = compactClayText(company.fit_summary || company.description) || 'Enriquecimento institucional disponível no Clay.';
+      const linked = opportunity ? `<div class="clay-link"><b>Vinculada a ${escapeHtml(opportunity.name)}</b>${escapeHtml(opportunity.why_now || `${opportunity.units_represented} unidades representadas`)}<div class="tags"><span class="tag p">${escapeHtml(primaryLink.match_method)}</span><span class="tag">${Math.round(Number(primaryLink.confidence) * 100)}% confiança</span></div></div>` : '';
+      const contactHtml = contacts.length ? contacts.map(contact => {
+        const draft = enrichment.buildEmailDraft(company, contact, opportunity);
+        const draftKey = `${company.id}:${contact.id}`;
+        clayDrafts.set(draftKey, draft);
+        const email = contact.email ? `mailto:${encodeURIComponent(contact.email)}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}` : '';
+        const phone = String(contact.phone || '').replace(/[^+\d]/g, '');
+        const contactLinkedin = enrichment.safeExternalUrl(contact.linkedin_url);
+        return `<div class="clay-contact">
+          <div class="clay-contact-head"><div><div class="clay-contact-name">${escapeHtml(contact.name)}</div><div class="clay-contact-title">${escapeHtml(contact.title || 'Cargo não informado')}</div></div>${contact.email ? '<span class="tag p">e-mail</span>' : '<span class="tag">LinkedIn</span>'}</div>
+          <div class="contact-actions">${email ? `<a href="${escapeHtml(email)}">${escapeHtml(contact.email)}</a>` : ''}${phone ? `<a href="tel:${escapeHtml(phone)}">${escapeHtml(contact.phone)}</a>` : ''}${contactLinkedin !== '#' ? `<a href="${escapeHtml(contactLinkedin)}" target="_blank" rel="noopener noreferrer">Perfil ↗</a>` : ''}</div>
+          <details class="email-draft"><summary>E-mail sugerido para este perfil</summary><pre><b>Assunto: ${escapeHtml(draft.subject)}</b>\n\n${escapeHtml(draft.body)}</pre><button class="copy" type="button" data-clay-draft="${escapeHtml(draftKey)}">Copiar e-mail</button></details>
+        </div>`;
+      }).join('') : '<div class="hint">Nenhum decisor enriquecido nesta carga.</div>';
+      return `<article class="clay-card">
+        <div class="clay-company-head"><div class="clay-avatar">${escapeHtml(companyInitials(company.name))}</div><div class="clay-company-main"><div class="nm">${escapeHtml(company.name)}</div><div class="tags"><span class="tag p">${escapeHtml(profileLabel)}</span><span class="tag g">Clay</span>${opportunity ? '<span class="tag b">vinculada</span>' : ''}</div><div class="clay-company-links">${companyLinks}</div></div></div>
+        <div class="clay-metrics"><div><b>${company.employee_count ?? '—'}</b><span>pessoas</span></div><div><b>${escapeHtml(company.annual_revenue || '—')}</b><span>receita estimada</span></div><div><b>${company.employee_growth_12m == null ? '—' : `${Number(company.employee_growth_12m).toLocaleString('pt-BR')}%`}</b><span>crescimento 12m</span></div></div>
+        <p class="clay-fit">${escapeHtml(fit)}</p>${linked}
+        <div class="clay-contacts"><h4>${contacts.length} decisor${contacts.length === 1 ? '' : 'es'}</h4>${contactHtml}</div>
+      </article>`;
+    }).join('');
+  }
+
   function renderScripts() {
     const neighborhoodOptions = Object.keys(window.SupplyHunterQuickEntry?.neighborhoods || {})
       .map(neighborhood => `<option value="${neighborhood}"${neighborhood === 'moema' ? ' selected' : ''}>${neighborhoodLabel(neighborhood)}</option>`)
@@ -214,6 +313,7 @@
     renderPipeline();
     renderRadar();
     renderMix();
+    renderClay();
   }
 
   function openPromotion(id) {
@@ -512,6 +612,8 @@
     });
 
     $('#q-unid').addEventListener('input', calculateScore);
+    $('#clay-filter').addEventListener('change', renderClay);
+    $('#clay-search').addEventListener('input', renderClay);
     $('#qe-build-url').addEventListener('click', buildQuickSearch);
     $('#qe-parse').addEventListener('click', () => {
       const text = $('#qe-paste').value;
@@ -546,6 +648,12 @@
         navigator.clipboard?.writeText(script.cmd).then(() => toast('Comando copiado.'), () => toast('Copie manualmente o comando.'));
       }
       if (data.collect) await collectPortal(event.target);
+      if (data.clayDraft) {
+        const draft = clayDrafts.get(data.clayDraft);
+        if (!draft) return;
+        navigator.clipboard?.writeText(`Assunto: ${draft.subject}\n\n${draft.body}`)
+          .then(() => toast('E-mail sugerido copiado.'), () => toast('Copie manualmente o e-mail sugerido.'));
+      }
     });
 
     $('#add').addEventListener('click', async () => {

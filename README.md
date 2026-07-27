@@ -5,9 +5,10 @@ Cockpit operacional e coletor Python para originar oferta de locação long stay
 ## Arquitetura
 
 ```
-portais → collector/coletor_v0.py → Supabase/Postgres → cockpit
-                                      ↕
-                               Auth + RLS do time
+portais → collector/coletor_v0.py ┐
+                                  ├→ Supabase/Postgres → cockpit
+Clay → enriquecimento assistido ──┘          ↕
+                                       Auth + RLS do time
 ```
 
 O cockpit continua estático e sem build. O design system da 7Cantos está em `public/index.html`; a persistência, autenticação e regras de interface estão em `public/app.js`.
@@ -141,6 +142,26 @@ anúncios já foram associados ao mesmo anunciante. Ao chegar a cinco, a interfa
 marca o anunciante como alvo de carteira. Telefone/e-mail presentes na colagem são
 detectados, ignorados e não gravados automaticamente.
 
+## 4. Enriquecimento Clay
+
+A aba **Enriquecimento** lê `clay_companies`, `clay_contacts` e
+`clay_company_opportunities`. A carga inicial foi feita no workspace Clay conectado e
+mantém no Supabase empresas, porte, receita estimada, aderência comercial, decisores,
+e-mails profissionais, telefones profissionais públicos e histórico de trabalho.
+Dados não encontrados permanecem `null`.
+
+O vínculo com o pipeline é auditável: comparação normalizada de nomes usa confiança
+e método (`normalized`, `alias` ou `manual`). O primeiro vínculo ativo é Tegra
+Incorporadora com a oportunidade Ledge Brooklin Studios. Os e-mails sugeridos são
+montados no navegador de acordo com o perfil da empresa e com os dados da oportunidade;
+o usuário precisa copiar ou abrir o rascunho, pois não há envio automático.
+
+O plugin Clay usado pelo Codex não é uma API disponível ao navegador. Para um fluxo
+contínuo, configure no Clay uma ação **HTTP API** que envie cada linha enriquecida para
+um endpoint autenticado; nunca coloque a secret key do Supabase numa coluna ou no
+frontend. A carga inicial e os contatos reais ficam apenas no banco protegido — nenhum
+e-mail ou telefone é versionado neste repositório público.
+
 ## Estrutura
 
 ```
@@ -148,6 +169,7 @@ public/index.html                  design system e markup do cockpit
 public/app.js                     Auth e persistência Supabase
 public/quick-entry.js             geração e interpretação local da entrada OLX
 public/radar.js                   validação da promoção de empreendimentos
+public/enrichment.js              vínculo por nome e rascunhos de e-mail por perfil
 public/config.js                  configuração pública do projeto hospedado
 public/config.example.js          modelo de configuração pública
 collector/coletor_v0.py           coleta, eventos, score e criação de alvos
@@ -162,7 +184,8 @@ CLAUDE.md                         contexto operacional permanente
 
 - A publishable key pode ficar no navegador porque RLS protege as linhas; a secret key nunca pode.
 - Cadastro é por convite e o papel vem de `app_metadata`, nunca de `user_metadata`.
-- Contato pessoal entra por ação humana. O coletor não captura telefone, e-mail ou WhatsApp.
+- O coletor de portais não captura telefone, e-mail ou WhatsApp.
+- Contatos profissionais vindos do Clay ficam em tabelas com RLS e não são versionados no Git.
 - A Entrada rápida interpreta somente conteúdo colado pelo hunter e ignora telefone/e-mail.
 - Nenhum envio ocorre sem aprovação humana.
 - Unidades HIS/HMP nunca entram em fluxo de curta temporada.
